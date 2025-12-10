@@ -1,6 +1,6 @@
+import type { AntigravityTokenExchangeResult } from "./antigravity/oauth";
+import { authorizeAntigravity, exchangeAntigravity } from "./antigravity/oauth";
 import { ANTIGRAVITY_PROVIDER_ID, ANTIGRAVITY_REDIRECT_URI } from "./constants";
-import type { AntigravityTokenExchangeResult } from "./gemini/oauth";
-import { authorizeAntigravity, exchangeAntigravity } from "./gemini/oauth";
 import { accessTokenExpired, isOAuthAuth } from "./plugin/auth";
 import { promptProjectId } from "./plugin/cli";
 import { startAntigravityDebugRequest } from "./plugin/debug";
@@ -242,8 +242,6 @@ export const AntigravityOAuthPlugin = async (
     ],
   },
 });
-
-export const GoogleOAuthPlugin = AntigravityOAuthPlugin;
 
 function toUrlString(value: RequestInfo): string {
   if (typeof value === "string") {
