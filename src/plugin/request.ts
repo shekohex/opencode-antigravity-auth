@@ -56,6 +56,47 @@ function transformStreamingPayload(payload: string): string {
     .join("\n");
 }
 
+function transformSseLine(line: string): string {
+  if (!line.startsWith("data:")) {
+    return line;
+  }
+  const json = line.slice(5).trim();
+  if (!json) {
+    return line;
+  }
+  try {
+    const parsed = JSON.parse(json) as { response?: unknown };
+    if (parsed.response !== undefined) {
+      return `data: ${JSON.stringify(parsed.response)}`;
+    }
+  } catch (_) {}
+  return line;
+}
+
+export function createSseTransformStream(): TransformStream<string, string> {
+  let buffer = "";
+  
+  return new TransformStream<string, string>({
+    transform(chunk, controller) {
+      buffer += chunk;
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+      
+      for (const line of lines) {
+        const transformed = transformSseLine(line);
+        controller.enqueue(transformed + "\n");
+      }
+    },
+    flush(controller) {
+      if (buffer.length > 0) {
+        const transformed = transformSseLine(buffer);
+        controller.enqueue(transformed);
+      }
+    },
+  });
+}
+
+
 function resolveModelName(rawModel: string): string {
   const aliased = MODEL_ALIASES[rawModel];
   if (aliased) {
@@ -189,6 +230,23 @@ export async function transformAntigravityResponse(
     return response;
   }
 
+  if (streaming && response.ok && isEventStreamResponse && response.body) {
+    logAntigravityDebugResponse(debugContext, response, {
+      note: "Streaming SSE (passthrough mode)",
+    });
+    
+    const transformedBody = response.body
+      .pipeThrough(new TextDecoderStream())
+      .pipeThrough(createSseTransformStream())
+      .pipeThrough(new TextEncoderStream());
+    
+    return new Response(transformedBody, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: response.headers,
+    });
+  }
+
   try {
     const text = await response.text();
     const headers = new Headers(response.headers);
@@ -245,7 +303,7 @@ export async function transformAntigravityResponse(
 
     logAntigravityDebugResponse(debugContext, response, {
       body: text,
-      note: streaming ? "Streaming SSE payload" : undefined,
+      note: streaming ? "Streaming SSE payload (fallback)" : undefined,
       headersOverride: headers,
     });
 
@@ -275,3 +333,4 @@ export async function transformAntigravityResponse(
     return response;
   }
 }
+

@@ -33,3 +33,7 @@ gemini-debug-*.log
 
 # Finder (MacOS) folder config
 .DS_Store
+
+# Log files
+*.log
+CLIProxyAPI
