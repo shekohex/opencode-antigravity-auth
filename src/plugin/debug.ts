@@ -153,6 +153,29 @@ function truncateForLog(text: string): string {
 }
 
 /**
+ * Writes a debug message to the log file and console if debugging is enabled.
+ */
+export function debugLog(message: string, ...args: unknown[]): void {
+  if (!debugEnabled) {
+    return;
+  }
+
+  const timestamp = new Date().toISOString();
+  // Safe serialization of args
+  const formattedArgs = args.map(arg => {
+    try {
+      return typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg);
+    } catch {
+      return '[Circular/Unserializable]';
+    }
+  }).join(' ');
+  
+  const line = `[${timestamp}] ${message} ${formattedArgs}`.trim();
+  
+  logWriter(line);
+}
+
+/**
  * Writes a single debug line using the configured writer.
  */
 function logDebug(line: string): void {

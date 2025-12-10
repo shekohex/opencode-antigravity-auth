@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { debugLog } from "../debug";
 import { normalizeThinkingConfig } from "../request-helpers";
 import type { RequestPayload, TransformContext, TransformResult } from "./types";
 
@@ -136,14 +137,10 @@ export function transformClaudeRequest(
         if (part.thought === true) {
           const signature = part.thoughtSignature;
           if (typeof signature === "string" && signature.length > 50) {
-            if (process.env.OPENCODE_ANTIGRAVITY_DEBUG === "1") {
-              console.log(`${DEBUG_PREFIX} Keeping thought part with valid signature`);
-            }
+            debugLog(`${DEBUG_PREFIX} Keeping thought part with valid signature`);
           } else {
             thinkingBlocksRemoved++;
-            if (process.env.OPENCODE_ANTIGRAVITY_DEBUG === "1") {
-              console.log(`${DEBUG_PREFIX} Stripped thought part without valid signature`);
-            }
+            debugLog(`${DEBUG_PREFIX} Stripped thought part without valid signature`);
             continue;
           }
         }
@@ -152,17 +149,13 @@ export function transformClaudeRequest(
         
         const functionCall = part.functionCall as Record<string, unknown> | undefined;
         if (functionCall && typeof functionCall.name === "string") {
-          if (process.env.OPENCODE_ANTIGRAVITY_DEBUG === "1") {
-            console.log(`${DEBUG_PREFIX} functionCall found:`, JSON.stringify(functionCall, null, 2));
-          }
+          debugLog(`${DEBUG_PREFIX} functionCall found:`, JSON.stringify(functionCall, null, 2));
           if (!functionCall.id) {
             const callId = `${functionCall.name}-${randomUUID()}`;
             functionCall.id = callId;
             toolsTransformed = true;
             
-            if (process.env.OPENCODE_ANTIGRAVITY_DEBUG === "1") {
-              console.log(`${DEBUG_PREFIX} Added ID to functionCall: ${functionCall.name} -> ${callId}`);
-            }
+            debugLog(`${DEBUG_PREFIX} Added ID to functionCall: ${functionCall.name} -> ${callId}`);
           }
           const queue = funcCallIdQueues.get(functionCall.name) ?? [];
           queue.push(functionCall.id as string);
@@ -171,21 +164,18 @@ export function transformClaudeRequest(
         
         const functionResponse = part.functionResponse as Record<string, unknown> | undefined;
         if (functionResponse && typeof functionResponse.name === "string") {
-          if (process.env.OPENCODE_ANTIGRAVITY_DEBUG === "1") {
-            const responsePreview = functionResponse.response ? 
-              JSON.stringify(functionResponse.response).slice(0, 200) + "..." : undefined;
-            console.log(`${DEBUG_PREFIX} functionResponse found:`, JSON.stringify({
-              ...functionResponse,
-              response: responsePreview,
-            }, null, 2));
-          }
+          const responsePreview = functionResponse.response ? 
+            JSON.stringify(functionResponse.response).slice(0, 200) + "..." : undefined;
+          debugLog(`${DEBUG_PREFIX} functionResponse found:`, JSON.stringify({
+            ...functionResponse,
+            response: responsePreview,
+          }, null, 2));
+
           if (!functionResponse.id) {
             const queue = funcCallIdQueues.get(functionResponse.name);
             if (queue && queue.length > 0) {
               functionResponse.id = queue.shift();
-              if (process.env.OPENCODE_ANTIGRAVITY_DEBUG === "1") {
-                console.log(`${DEBUG_PREFIX} Assigned ID to functionResponse: ${functionResponse.name} -> ${functionResponse.id}`);
-              }
+              debugLog(`${DEBUG_PREFIX} Assigned ID to functionResponse: ${functionResponse.name} -> ${functionResponse.id}`);
             }
           }
         }
@@ -196,8 +186,8 @@ export function transformClaudeRequest(
       content.parts = filteredParts;
     }
     
-    if (thinkingBlocksRemoved > 0 && process.env.OPENCODE_ANTIGRAVITY_DEBUG === "1") {
-      console.log(`${DEBUG_PREFIX} Stripped ${thinkingBlocksRemoved} thought parts from conversation history`);
+    if (thinkingBlocksRemoved > 0) {
+      debugLog(`${DEBUG_PREFIX} Removed ${thinkingBlocksRemoved} invalid thinking blocks from history`);
     }
   }
 
@@ -212,11 +202,11 @@ export function transformClaudeRequest(
     request: requestPayload,
   };
 
-  if (process.env.OPENCODE_ANTIGRAVITY_DEBUG === "1") {
-    console.log(`${DEBUG_PREFIX} Transformed ${toolCount} tools for Claude model: ${context.model}`);
-    if (toolsTransformed) {
-      console.log(`${DEBUG_PREFIX} Tool schemas converted: parametersJsonSchema → parameters`);
-    }
+  debugLog(`${DEBUG_PREFIX} Transforming Claude request for project: ${context.projectId}`);
+  debugLog(`${DEBUG_PREFIX} Model: ${context.model}, Streaming: ${context.streaming}`);
+  debugLog(`${DEBUG_PREFIX} Transformed ${toolCount} tools for Claude model: ${context.model}`);
+  if (toolsTransformed) {
+    debugLog(`${DEBUG_PREFIX} Tool schemas converted: parametersJsonSchema → parameters`);
   }
 
   return {
