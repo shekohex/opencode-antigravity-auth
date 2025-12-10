@@ -2,19 +2,19 @@ import { createWriteStream } from "node:fs";
 import { join } from "node:path";
 import { cwd, env } from "node:process";
 
-const DEBUG_FLAG = env.OPENCODE_GEMINI_DEBUG ?? "";
+const DEBUG_FLAG = env.OPENCODE_ANTIGRAVITY_DEBUG ?? "";
 const MAX_BODY_PREVIEW_CHARS = 2000;
 const debugEnabled = DEBUG_FLAG.trim() === "1";
 const logFilePath = debugEnabled ? defaultLogFilePath() : undefined;
 const logWriter = createLogWriter(logFilePath);
 
-export interface GeminiDebugContext {
+export interface AntigravityDebugContext {
   id: string;
   streaming: boolean;
   startedAt: number;
 }
 
-interface GeminiDebugRequestMeta {
+interface AntigravityDebugRequestMeta {
   originalUrl: string;
   resolvedUrl: string;
   method?: string;
@@ -22,9 +22,10 @@ interface GeminiDebugRequestMeta {
   body?: BodyInit | null;
   streaming: boolean;
   projectId?: string;
+  sessionId?: string;
 }
 
-interface GeminiDebugResponseMeta {
+interface AntigravityDebugResponseMeta {
   body?: string;
   note?: string;
   error?: unknown;
@@ -33,40 +34,37 @@ interface GeminiDebugResponseMeta {
 
 let requestCounter = 0;
 
-/**
- * Begins a debug trace for a Gemini request, logging request metadata when debugging is enabled.
- */
-export function startGeminiDebugRequest(meta: GeminiDebugRequestMeta): GeminiDebugContext | null {
+export function startAntigravityDebugRequest(meta: AntigravityDebugRequestMeta): AntigravityDebugContext | null {
   if (!debugEnabled) {
     return null;
   }
 
-  const id = `GEMINI-${++requestCounter}`;
+  const id = `ANTIGRAVITY-${++requestCounter}`;
   const method = meta.method ?? "GET";
-  logDebug(`[Gemini Debug ${id}] ${method} ${meta.resolvedUrl}`);
+  logDebug(`[Antigravity Debug ${id}] ${method} ${meta.resolvedUrl}`);
   if (meta.originalUrl && meta.originalUrl !== meta.resolvedUrl) {
-    logDebug(`[Gemini Debug ${id}] Original URL: ${meta.originalUrl}`);
+    logDebug(`[Antigravity Debug ${id}] Original URL: ${meta.originalUrl}`);
   }
   if (meta.projectId) {
-    logDebug(`[Gemini Debug ${id}] Project: ${meta.projectId}`);
+    logDebug(`[Antigravity Debug ${id}] Project: ${meta.projectId}`);
   }
-  logDebug(`[Gemini Debug ${id}] Streaming: ${meta.streaming ? "yes" : "no"}`);
-  logDebug(`[Gemini Debug ${id}] Headers: ${JSON.stringify(maskHeaders(meta.headers))}`);
+  if (meta.sessionId) {
+    logDebug(`[Antigravity Debug ${id}] Session: ${meta.sessionId}`);
+  }
+  logDebug(`[Antigravity Debug ${id}] Streaming: ${meta.streaming ? "yes" : "no"}`);
+  logDebug(`[Antigravity Debug ${id}] Headers: ${JSON.stringify(maskHeaders(meta.headers))}`);
   const bodyPreview = formatBodyPreview(meta.body);
   if (bodyPreview) {
-    logDebug(`[Gemini Debug ${id}] Body Preview: ${bodyPreview}`);
+    logDebug(`[Antigravity Debug ${id}] Body Preview: ${bodyPreview}`);
   }
 
   return { id, streaming: meta.streaming, startedAt: Date.now() };
 }
 
-/**
- * Logs response details for a previously started debug trace when debugging is enabled.
- */
-export function logGeminiDebugResponse(
-  context: GeminiDebugContext | null | undefined,
+export function logAntigravityDebugResponse(
+  context: AntigravityDebugContext | null | undefined,
   response: Response,
-  meta: GeminiDebugResponseMeta = {},
+  meta: AntigravityDebugResponseMeta = {},
 ): void {
   if (!debugEnabled || !context) {
     return;
@@ -74,25 +72,25 @@ export function logGeminiDebugResponse(
 
   const durationMs = Date.now() - context.startedAt;
   logDebug(
-    `[Gemini Debug ${context.id}] Response ${response.status} ${response.statusText} (${durationMs}ms)`,
+    `[Antigravity Debug ${context.id}] Response ${response.status} ${response.statusText} (${durationMs}ms)`,
   );
   logDebug(
-    `[Gemini Debug ${context.id}] Response Headers: ${JSON.stringify(
+    `[Antigravity Debug ${context.id}] Response Headers: ${JSON.stringify(
       maskHeaders(meta.headersOverride ?? response.headers),
     )}`,
   );
 
   if (meta.note) {
-    logDebug(`[Gemini Debug ${context.id}] Note: ${meta.note}`);
+    logDebug(`[Antigravity Debug ${context.id}] Note: ${meta.note}`);
   }
 
   if (meta.error) {
-    logDebug(`[Gemini Debug ${context.id}] Error: ${formatError(meta.error)}`);
+    logDebug(`[Antigravity Debug ${context.id}] Error: ${formatError(meta.error)}`);
   }
 
   if (meta.body) {
     logDebug(
-      `[Gemini Debug ${context.id}] Response Body Preview: ${truncateForLog(meta.body)}`,
+      `[Antigravity Debug ${context.id}] Response Body Preview: ${truncateForLog(meta.body)}`,
     );
   }
 }
@@ -180,7 +178,7 @@ function formatError(error: unknown): string {
  */
 function defaultLogFilePath(): string {
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-  return join(cwd(), `gemini-debug-${timestamp}.log`);
+  return join(cwd(), `antigravity-debug-${timestamp}.log`);
 }
 
 /**

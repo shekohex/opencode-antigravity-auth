@@ -1,3 +1,15 @@
+import { randomUUID } from "node:crypto";
+
+const SESSION_ID = `-${Math.floor(Math.random() * 9_000_000_000_000_000_000)}`;
+
+export function getSessionId(): string {
+  return SESSION_ID;
+}
+
+export function generateRequestId(): string {
+  return `agent-${randomUUID()}`;
+}
+
 const GEMINI_PREVIEW_LINK = "https://goo.gle/enable-preview-features";
 
 export interface GeminiApiError {

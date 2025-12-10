@@ -1,31 +1,39 @@
-import { CODE_ASSIST_HEADERS, GEMINI_CODE_ASSIST_ENDPOINT } from "../constants";
-import { logGeminiDebugResponse, type GeminiDebugContext } from "./debug";
+import { CODE_ASSIST_ENDPOINT, CODE_ASSIST_HEADERS } from "../constants";
+import { logAntigravityDebugResponse, type AntigravityDebugContext } from "./debug";
 import {
   extractUsageFromSsePayload,
   extractUsageMetadata,
-  normalizeThinkingConfig,
+  generateRequestId,
+  getSessionId,
   parseGeminiApiBody,
   rewriteGeminiPreviewAccessError,
-  type GeminiApiBody,
-  type GeminiUsageMetadata,
+  type GeminiApiBody
 } from "./request-helpers";
+import {
+  transformClaudeRequest,
+  transformGeminiRequest,
+  type TransformContext,
+} from "./transform";
 
 const STREAM_ACTION = "streamGenerateContent";
+
+const MODEL_ALIASES: Record<string, string> = {
+  "gemini-2.5-computer-use-preview-10-2025": "rev19-uic3-1p",
+  "gemini-3-pro-image-preview": "gemini-3-pro-image",
+  "gemini-3-pro-preview": "gemini-3-pro-high",
+  "gemini-claude-sonnet-4-5": "claude-sonnet-4-5",
+  "gemini-claude-sonnet-4-5-thinking": "claude-sonnet-4-5-thinking",
+  "gemini-claude-opus-4-5-thinking": "claude-opus-4-5-thinking",
+};
+
 const MODEL_FALLBACKS: Record<string, string> = {
   "gemini-2.5-flash-image": "gemini-2.5-flash",
 };
-/**
- * Detects Gemini/Generative Language API requests by URL.
- * @param input Request target passed to fetch.
- * @returns True when the URL targets generativelanguage.googleapis.com.
- */
+
 export function isGenerativeLanguageRequest(input: RequestInfo): input is string {
   return typeof input === "string" && input.includes("generativelanguage.googleapis.com");
 }
 
-/**
- * Rewrites SSE payloads so downstream consumers see only the inner `response` objects.
- */
 function transformStreamingPayload(payload: string): string {
   return payload
     .split("\n")
@@ -48,11 +56,15 @@ function transformStreamingPayload(payload: string): string {
     .join("\n");
 }
 
-/**
- * Rewrites OpenAI-style requests into Gemini Code Assist shape, normalizing model, headers,
- * optional cached_content, and thinking config. Also toggles streaming mode for SSE actions.
- */
-export function prepareGeminiRequest(
+function resolveModelName(rawModel: string): string {
+  const aliased = MODEL_ALIASES[rawModel];
+  if (aliased) {
+    return aliased;
+  }
+  return MODEL_FALLBACKS[rawModel] ?? rawModel;
+}
+
+export function prepareAntigravityRequest(
   input: RequestInfo,
   init: RequestInit | undefined,
   accessToken: string,
@@ -82,13 +94,15 @@ export function prepareGeminiRequest(
   }
 
   const [, rawModel = "", rawAction = ""] = match;
-  const effectiveModel = MODEL_FALLBACKS[rawModel] ?? rawModel;
+  const effectiveModel = resolveModelName(rawModel);
   const streaming = rawAction === STREAM_ACTION;
-  const transformedUrl = `${GEMINI_CODE_ASSIST_ENDPOINT}/v1internal:${rawAction}${
+  const transformedUrl = `${CODE_ASSIST_ENDPOINT}/v1internal:${rawAction}${
     streaming ? "?alt=sse" : ""
   }`;
 
   let body = baseInit.body;
+  let transformDebugInfo: { transformer: string; toolCount?: number; toolsTransformed?: boolean } | undefined;
+  
   if (typeof baseInit.body === "string" && baseInit.body) {
     try {
       const parsedBody = JSON.parse(baseInit.body) as Record<string, unknown>;
@@ -98,67 +112,39 @@ export function prepareGeminiRequest(
         const wrappedBody = {
           ...parsedBody,
           model: effectiveModel,
+          userAgent: "antigravity",
+          requestId: generateRequestId(),
         } as Record<string, unknown>;
+        if (wrappedBody.request && typeof wrappedBody.request === "object") {
+          (wrappedBody.request as Record<string, unknown>).sessionId = getSessionId();
+        }
         body = JSON.stringify(wrappedBody);
       } else {
-        const requestPayload: Record<string, unknown> = { ...parsedBody };
-
-        const rawGenerationConfig = requestPayload.generationConfig as Record<string, unknown> | undefined;
-        const normalizedThinking = normalizeThinkingConfig(rawGenerationConfig?.thinkingConfig);
-        if (normalizedThinking) {
-          if (rawGenerationConfig) {
-            rawGenerationConfig.thinkingConfig = normalizedThinking;
-            requestPayload.generationConfig = rawGenerationConfig;
-          } else {
-            requestPayload.generationConfig = { thinkingConfig: normalizedThinking };
-          }
-        } else if (rawGenerationConfig?.thinkingConfig) {
-          delete rawGenerationConfig.thinkingConfig;
-          requestPayload.generationConfig = rawGenerationConfig;
-        }
-
-        if ("system_instruction" in requestPayload) {
-          requestPayload.systemInstruction = requestPayload.system_instruction;
-          delete requestPayload.system_instruction;
-        }
-
-        const cachedContentFromExtra =
-          typeof requestPayload.extra_body === "object" && requestPayload.extra_body
-            ? (requestPayload.extra_body as Record<string, unknown>).cached_content ??
-              (requestPayload.extra_body as Record<string, unknown>).cachedContent
-            : undefined;
-        const cachedContent =
-          (requestPayload.cached_content as string | undefined) ??
-          (requestPayload.cachedContent as string | undefined) ??
-          (cachedContentFromExtra as string | undefined);
-        if (cachedContent) {
-          requestPayload.cachedContent = cachedContent;
-        }
-
-        delete requestPayload.cached_content;
-        delete requestPayload.cachedContent;
-        if (requestPayload.extra_body && typeof requestPayload.extra_body === "object") {
-          delete (requestPayload.extra_body as Record<string, unknown>).cached_content;
-          delete (requestPayload.extra_body as Record<string, unknown>).cachedContent;
-          if (Object.keys(requestPayload.extra_body as Record<string, unknown>).length === 0) {
-            delete requestPayload.extra_body;
-          }
-        }
-
-        if ("model" in requestPayload) {
-          delete requestPayload.model;
-        }
-
-        const wrappedBody = {
-          project: projectId,
+        const context: TransformContext = {
           model: effectiveModel,
-          request: requestPayload,
+          projectId,
+          streaming,
+          requestId: generateRequestId(),
+          sessionId: getSessionId(),
         };
 
-        body = JSON.stringify(wrappedBody);
+        const isClaudeModel = effectiveModel.includes("claude");
+        const result = isClaudeModel
+          ? transformClaudeRequest(context, parsedBody)
+          : transformGeminiRequest(context, parsedBody);
+
+        body = result.body;
+        transformDebugInfo = result.debugInfo;
+
+        if (process.env.OPENCODE_ANTIGRAVITY_DEBUG === "1" && transformDebugInfo) {
+          console.log(`[Antigravity Transform] Using ${transformDebugInfo.transformer} transformer for model: ${effectiveModel}`);
+          if (transformDebugInfo.toolCount !== undefined) {
+            console.log(`[Antigravity Transform] Tool count: ${transformDebugInfo.toolCount}`);
+          }
+        }
       }
     } catch (error) {
-      console.error("Failed to transform Gemini request body:", error);
+      console.error("Failed to transform Antigravity request body:", error);
     }
   }
 
@@ -186,10 +172,10 @@ export function prepareGeminiRequest(
  * Normalizes Gemini responses: applies retry headers, extracts cache usage into headers,
  * rewrites preview errors, flattens streaming payloads, and logs debug metadata.
  */
-export async function transformGeminiResponse(
+export async function transformAntigravityResponse(
   response: Response,
   streaming: boolean,
-  debugContext?: GeminiDebugContext | null,
+  debugContext?: AntigravityDebugContext | null,
   requestedModel?: string,
 ): Promise<Response> {
   const contentType = response.headers.get("content-type") ?? "";
@@ -197,7 +183,7 @@ export async function transformGeminiResponse(
   const isEventStreamResponse = contentType.includes("text/event-stream");
 
   if (!isJsonResponse && !isEventStreamResponse) {
-    logGeminiDebugResponse(debugContext, response, {
+    logAntigravityDebugResponse(debugContext, response, {
       note: "Non-JSON response (body omitted)",
     });
     return response;
@@ -257,7 +243,7 @@ export async function transformGeminiResponse(
       }
     }
 
-    logGeminiDebugResponse(debugContext, response, {
+    logAntigravityDebugResponse(debugContext, response, {
       body: text,
       note: streaming ? "Streaming SSE payload" : undefined,
       headersOverride: headers,
@@ -281,11 +267,11 @@ export async function transformGeminiResponse(
 
     return new Response(text, init);
   } catch (error) {
-    logGeminiDebugResponse(debugContext, response, {
+    logAntigravityDebugResponse(debugContext, response, {
       error,
-      note: "Failed to transform Gemini response",
+      note: "Failed to transform Antigravity response",
     });
-    console.error("Failed to transform Gemini response:", error);
+    console.error("Failed to transform Antigravity response:", error);
     return response;
   }
 }
