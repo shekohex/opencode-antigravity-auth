@@ -189,3 +189,10 @@ Authorization headers are redacted; payload previews are truncated to 2 KB.
 3. Complete browser flow (or copy/paste if headless).
 4. Issue a Gemini model request, e.g. `opencode run -m google/gemini-2.5-flash -p "hello"` or `opencode run -m google/gemini-3-pro-high -p "solve this"`.
 5. Verify responses succeed and no API key prompt appears.
+
+## Credits
+
+This project is based on:
+- [opencode-gemini-auth](https://github.com/jenslys/opencode-gemini-auth) - Original Gemini OAuth implementation by [@jenslys](https://github.com/jenslys)
+- [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) - Reference implementation for Antigravity API translation
+
