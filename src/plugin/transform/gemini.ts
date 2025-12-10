@@ -1,4 +1,6 @@
 import { normalizeThinkingConfig } from "../request-helpers";
+import { getCachedSignature } from "../cache";
+import { debugLog } from "../debug";
 import type { RequestPayload, TransformContext, TransformResult } from "./types";
 
 /**
@@ -76,6 +78,32 @@ export function transformGeminiRequest(
 
   if ("model" in requestPayload) {
     delete requestPayload.model;
+  }
+
+  const contents = requestPayload.contents as Array<Record<string, unknown>> | undefined;
+  if (Array.isArray(contents)) {
+    for (const content of contents) {
+      const parts = content.parts as Array<Record<string, unknown>> | undefined;
+      if (Array.isArray(parts)) {
+        for (const part of parts) {
+          if (part.thought === true) {
+            let signature = part.thoughtSignature;
+
+            if (!signature || (typeof signature === "string" && signature.length < 50)) {
+              // Try cache
+              if (typeof part.text === "string") {
+                const cached = getCachedSignature(context.sessionId, part.text);
+                if (cached) {
+                  signature = cached;
+                  part.thoughtSignature = cached;
+                  debugLog(`[Gemini Transform] Restored thought signature from cache`);
+                }
+              }
+            }
+          }
+        }
+      }
+    }
   }
 
   requestPayload.sessionId = context.sessionId;
