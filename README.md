@@ -1,7 +1,6 @@
-# Gemini OAuth Plugin for Opencode
+# Antigravity OAuth Plugin for Opencode
 
-Authenticate the Opencode CLI with your Google account so you can use your
-existing Gemini plan and its included quota instead of API billing.
+Authenticate the Opencode CLI with your Antigravity (Cloud Code) account so you can use the Antigravity-backed Gemini models with your existing quota.
 
 ## Setup
 
@@ -10,52 +9,42 @@ existing Gemini plan and its included quota instead of API billing.
    ```json
    {
      "$schema": "https://opencode.ai/config.json",
-     "plugin": ["opencode-gemini-auth"]
+     "plugin": ["opencode-antigravity-auth"]
    }
    ```
 
 2. Run `opencode auth login`.
-3. Choose the Google provider and select **OAuth with Google (Gemini CLI)**.
+3. Choose the Google provider and select **OAuth with Antigravity**.
 
-The plugin spins up a local callback listener, so after approving in the
-browser you'll land on an "Authentication complete" page with no URL
-copy/paste required. If that port is already taken, the CLI automatically
-falls back to the classic copy/paste flow and explains what to do.
+The plugin spins up a local callback listener on `http://localhost:51121/oauth-callback`, so after approving in the browser you'll land on an "Authentication complete" page with no URL copy/paste required. If that port is already taken or you're headless, the CLI automatically falls back to the copy/paste flow and explains what to do.
 
 ## Updating
 
 > [!WARNING]
 > Opencode does NOT auto-update plugins.
 
-To get the latest version, you need to clear the cached plugin and let Opencode reinstall it:
+To get the latest version, clear the cached plugin and let Opencode reinstall it:
 
 ```bash
-# Remove the plugin from cache
-rm -rf ~/.cache/opencode/node_modules/opencode-gemini-auth
-
-# Run Opencode to trigger reinstall
+rm -rf ~/.cache/opencode/node_modules/opencode-antigravity-auth
 opencode
 ```
 
-Alternatively, you can manually remove the dependency from `~/.cache/opencode/package.json` if the above doesn't work.
+Alternatively, remove the dependency from `~/.cache/opencode/package.json` if the above doesn't work.
 
 ## Thinking Configuration
 
-This plugin supports configuring "thinking" capabilities for Gemini models via the `thinkingConfig` option.
+Antigravity forwards Gemini model options, including `thinkingConfig`:
 
-*   **Gemini 3 models** use `thinkingLevel` (string: `'low'`, `'medium'`, `'high'`).
-*   **Gemini 2.5 models** use `thinkingBudget` (number).
-
-The plugin passes these values through to the API as configured.
+* `thinkingLevel` for Gemini 3 models (`"low" | "medium" | "high"`).
+* `thinkingBudget` for Gemini 2.5 models (number).
 
 ### Examples
-
-**Gemini 3 (using `thinkingLevel`):**
 
 ```json
 {
   "provider": {
-    "google": {
+    "antigravity": {
       "models": {
         "gemini-3-pro-preview": {
           "options": {
@@ -64,20 +53,7 @@ The plugin passes these values through to the API as configured.
               "includeThoughts": true
             }
           }
-        }
-      }
-    }
-  }
-}
-```
-
-**Gemini 2.5 (using `thinkingBudget`):**
-
-```json
-{
-  "provider": {
-    "google": {
-      "models": {
+        },
         "gemini-2.5-flash": {
           "options": {
             "thinkingConfig": {
@@ -92,58 +68,124 @@ The plugin passes these values through to the API as configured.
 }
 ```
 
+## Claude Proxy Models
+
+Antigravity provides access to Claude models via `gemini-claude-*` model names. The plugin automatically transforms tool schemas for Claude compatibility.
+
+### Available Claude Models
+- `gemini-claude-sonnet-4-5` - Claude Sonnet 4.5
+- `gemini-claude-sonnet-4-5-thinking` - Claude Sonnet 4.5 with thinking
+- `gemini-claude-opus-4-5-thinking` - Claude Opus 4.5 with thinking
+
 ## Local Development
 
-First, clone the repository and install dependencies:
-
 ```bash
-git clone https://github.com/jenslys/opencode-gemini-auth.git
-cd opencode-gemini-auth
+git clone https://github.com/shekohex/opencode-antigravity-auth.git
+cd opencode-antigravity-auth
 bun install
 ```
 
-When you want Opencode to use a local checkout of this plugin, point the
-`plugin` entry in your config to the folder via a `file://` URL:
+To load a local checkout in Opencode:
 
 ```json
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugin": ["file:///absolute/path/to/opencode-gemini-auth"]
+  "plugin": ["file:///absolute/path/to/opencode-antigravity-auth"]
 }
 ```
 
-Replace `/absolute/path/to/opencode-gemini-auth` with the absolute path to
-your local clone.
+## Example Opencode config with provider/models
 
-## Manual Google Cloud Setup
+You should copy that config to your opencode config file.
 
-If automatic provisioning fails, use the console:
-
-1. Go to the Google Cloud Console and create (or select) a project, e.g. `gemini`.
-2. Select that project.
-3. Enable the **Gemini for Google Cloud API** (`cloudaicompanion.googleapis.com`).
-4. Re-run `opencode auth login` and enter the project **ID** (not the display name).
-
-## Debugging Gemini Requests
-
-Set `OPENCODE_GEMINI_DEBUG=1` in the environment when you run an Opencode
-command to capture every Gemini request/response that this plugin issues. When
-enabled, the plugin writes to a timestamped `gemini-debug-<ISO>.log` file in
-your current working directory so the CLI output stays clean.
-
-```bash
-OPENCODE_GEMINI_DEBUG=1 opencode
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": ["opencode-antigravity-auth"],
+  "provider": {
+    "google": {
+      "npm": "@ai-sdk/google",
+      "models": {
+        "gemini-3-pro-preview": {
+          "id": "gemini-3-pro-preview",
+          "name": "Gemini 3 Pro Preview",
+          "release_date": "2025-11-18",
+          "reasoning": true,
+          "limit": { "context": 1000000, "output": 64000 },
+          "cost": { "input": 2, "output": 12, "cache_read": 0.2 },
+          "modalities": { "input": ["text", "image", "video", "audio", "pdf"], "output": ["text"] }
+        },
+        "gemini-3-pro-high": {
+          "id": "gemini-3-pro-preview",
+          "name": "Gemini 3 Pro Preview (High Thinking)",
+          "options": { "thinkingConfig": { "thinkingLevel": "high", "includeThoughts": true } }
+        },
+        "gemini-3-pro-medium": {
+          "id": "gemini-3-pro-preview",
+          "name": "Gemini 3 Pro Preview (Medium Thinking)",
+          "options": { "thinkingConfig": { "thinkingLevel": "medium", "includeThoughts": true } }
+        },
+        "gemini-3-pro-low": {
+          "id": "gemini-3-pro-preview",
+          "name": "Gemini 3 Pro Preview (Low Thinking)",
+          "options": { "thinkingConfig": { "thinkingLevel": "low", "includeThoughts": true } }
+        },
+        "gemini-2.5-flash": {
+          "id": "gemini-2.5-flash",
+          "name": "Gemini 2.5 Flash",
+          "release_date": "2025-03-20",
+          "reasoning": true,
+          "limit": { "context": 1048576, "output": 65536 },
+          "cost": { "input": 0.3, "output": 2.5, "cache_read": 0.075 },
+          "modalities": { "input": ["text", "image", "audio", "video", "pdf"], "output": ["text"] }
+        },
+        "gemini-2.5-flash-lite": {
+          "id": "gemini-2.5-flash-lite",
+          "name": "Gemini 2.5 Flash Lite",
+          "release_date": "2025-06-17",
+          "reasoning": true,
+          "limit": { "context": 1048576, "output": 65536 },
+          "cost": { "input": 0.1, "output": 0.4, "cache_read": 0.025 },
+          "modalities": { "input": ["text", "image", "audio", "video", "pdf"], "output": ["text"] }
+        },
+        "gemini-claude-sonnet-4-5-thinking": {
+          "id": "gemini-claude-sonnet-4-5-thinking",
+          "name": "Claude Sonnet 4.5 Thinking",
+          "release_date": "2025-11-18",
+          "reasoning": true,
+          "limit": { "context": 200000, "output": 64000 },
+          "cost": { "input": 3, "output": 15, "cache_read": 0.3 },
+          "modalities": { "input": ["text", "image", "pdf"], "output": ["text"] }
+        },
+        "gemini-claude-opus-4-5-thinking": {
+          "id": "gemini-claude-opus-4-5-thinking",
+          "name": "Claude Opus 4.5 Thinking",
+          "release_date": "2025-11-24",
+          "reasoning": true,
+          "limit": { "context": 200000, "output": 64000 },
+          "cost": { "input": 5, "output": 25, "cache_read": 0.5 },
+          "modalities": { "input": ["text", "image", "pdf"], "output": ["text"] }
+        }
+      }
+    }
+  }
+}
 ```
 
-The logger shows the transformed URL, HTTP method, sanitized headers (the
-`Authorization` header is redacted), whether the call used streaming, and a
-truncated preview (2 KB) of both the request and response bodies. This is handy
-when diagnosing "Bad Request" responses from Gemini. Remember that payloads may
-still include parts of your prompt or response, so only enable this flag when
-you're comfortable keeping that information in the generated log file.
+## Debugging Antigravity Requests
 
-**404s on `gemini-2.5-flash-image`.** Opencode fires internal
-summarization/title requests at `gemini-2.5-flash-image`. The plugin
-automatically remaps those payloads to `gemini-2.5-flash`, eliminating the extra
-404s for accounts without image access. If you still see a 404, confirm your
-project actually has access to the fallback model.
+Set `OPENCODE_ANTIGRAVITY_DEBUG=1` to capture Antigravity request/response logs. Logs are written to `antigravity-debug-<ISO>.log` in the current working directory.
+
+```bash
+OPENCODE_ANTIGRAVITY_DEBUG=1 opencode
+```
+
+Authorization headers are redacted; payload previews are truncated to 2 KB.
+
+## How to test with Opencode
+
+1. Install plugin locally as above or via registry.
+2. Run `opencode auth login` and pick **Antigravity**.
+3. Complete browser flow (or copy/paste if headless).
+4. Issue a Gemini model request, e.g. `opencode run -m google/gemini-2.5-flash -p "hello"` or `opencode run -m google/gemini-3-pro-high -p "solve this"`.
+5. Verify responses succeed and no API key prompt appears.
