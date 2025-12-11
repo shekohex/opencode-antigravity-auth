@@ -1,10 +1,11 @@
 import { randomUUID } from "node:crypto";
-import { debugLog } from "../debug";
 import { getCachedSignature } from "../cache";
+import { createLogger } from "../logger";
 import { normalizeThinkingConfig } from "../request-helpers";
+import { normalizeGoogleSearchTool } from "./gemini";
 import type { RequestPayload, TransformContext, TransformResult } from "./types";
 
-const DEBUG_PREFIX = "[Claude Transform]";
+const log = createLogger("transform.claude");
 
 /**
  * Transforms a Gemini-format request payload for Claude proxy models.
@@ -107,7 +108,7 @@ export function transformClaudeRequest(
                 delete rawGenerationConfig.max_output_tokens;
             }
             
-            debugLog(`${DEBUG_PREFIX} Bumped maxOutputTokens to ${newMax} to satisfy thinking budget (${budget})`);
+            log.debug("Bumped maxOutputTokens", { newMax, budget });
         }
 
         requestPayload.generationConfig = rawGenerationConfig;
@@ -118,7 +119,7 @@ export function transformClaudeRequest(
         const budget = normalizedThinking.thinkingBudget;
         if (budget) {
             genConfig.maxOutputTokens = 64000;
-            debugLog(`${DEBUG_PREFIX} Set maxOutputTokens to 64000 to satisfy thinking budget (${budget})`);
+            log.debug("Set maxOutputTokens to 64000", { budget });
         }
         
         requestPayload.generationConfig = genConfig;
@@ -229,15 +230,15 @@ export function transformClaudeRequest(
               if (cached) {
                 signature = cached;
                 part.thoughtSignature = cached;
-                debugLog(`${DEBUG_PREFIX} Restored thought signature from cache`);
+                log.debug("Restored thought signature from cache");
               }
             }
           }
 
           if (typeof signature === "string" && signature.length > 50) {
-            debugLog(`${DEBUG_PREFIX} Keeping thought part with valid signature`);
+            log.debug("Keeping thought part with valid signature");
           } else {
-            debugLog(`${DEBUG_PREFIX} Warning: Thought part has invalid/missing signature (len=${typeof signature === 'string' ? signature.length : 0}). Removing it to prevent API error.`);
+            log.warn("Invalid/missing thought signature, removing block", { signatureLen: typeof signature === 'string' ? signature.length : 0 });
             thinkingBlocksRemoved++;
             continue;
           }
@@ -247,13 +248,13 @@ export function transformClaudeRequest(
         
         const functionCall = part.functionCall as Record<string, unknown> | undefined;
         if (functionCall && typeof functionCall.name === "string") {
-          debugLog(`${DEBUG_PREFIX} functionCall found:`, JSON.stringify(functionCall, null, 2));
+          log.debug("functionCall found", { functionCall });
           if (!functionCall.id) {
             const callId = `${functionCall.name}-${randomUUID()}`;
             functionCall.id = callId;
             toolsTransformed = true;
             
-            debugLog(`${DEBUG_PREFIX} Added ID to functionCall: ${functionCall.name} -> ${callId}`);
+            log.debug("Added ID to functionCall", { name: functionCall.name, callId });
           }
           const queue = funcCallIdQueues.get(functionCall.name) ?? [];
           queue.push(functionCall.id as string);
@@ -264,16 +265,13 @@ export function transformClaudeRequest(
         if (functionResponse && typeof functionResponse.name === "string") {
           const responsePreview = functionResponse.response ? 
             JSON.stringify(functionResponse.response).slice(0, 200) + "..." : undefined;
-          debugLog(`${DEBUG_PREFIX} functionResponse found:`, JSON.stringify({
-            ...functionResponse,
-            response: responsePreview,
-          }, null, 2));
+          log.debug("functionResponse found", { name: functionResponse.name, responsePreview });
 
           if (!functionResponse.id) {
             const queue = funcCallIdQueues.get(functionResponse.name);
             if (queue && queue.length > 0) {
               functionResponse.id = queue.shift();
-              debugLog(`${DEBUG_PREFIX} Assigned ID to functionResponse: ${functionResponse.name} -> ${functionResponse.id}`);
+              log.debug("Assigned ID to functionResponse", { name: functionResponse.name, id: functionResponse.id });
             }
           }
         }
@@ -285,15 +283,20 @@ export function transformClaudeRequest(
     }
     
     if (thinkingBlocksRemoved > 0) {
-      debugLog(`${DEBUG_PREFIX} Removed ${thinkingBlocksRemoved} invalid thinking blocks from history`);
+      log.debug("Removed invalid thinking blocks", { count: thinkingBlocksRemoved });
     }
 
-    debugLog(`${DEBUG_PREFIX} Final transformed contents:`, JSON.stringify(contents, null, 2));
-    debugLog(`${DEBUG_PREFIX} Final generationConfig:`, JSON.stringify(requestPayload.generationConfig, null, 2));
+    log.debug("Final transformed contents", { contents });
+    log.debug("Final generationConfig", { generationConfig: requestPayload.generationConfig });
   }
 
 
   requestPayload.sessionId = context.sessionId;
+
+  const googleSearchEnabled = normalizeGoogleSearchTool(requestPayload);
+  if (googleSearchEnabled) {
+    log.debug("Google Search tool enabled", { model: context.model });
+  }
 
   const wrappedBody = {
     project: context.projectId,
@@ -303,11 +306,19 @@ export function transformClaudeRequest(
     request: requestPayload,
   };
 
-  debugLog(`${DEBUG_PREFIX} Transforming Claude request for project: ${context.projectId}`);
-  debugLog(`${DEBUG_PREFIX} Model: ${context.model}, Streaming: ${context.streaming}`);
-  debugLog(`${DEBUG_PREFIX} Transformed ${toolCount} tools for Claude model: ${context.model}`);
-  if (toolsTransformed) {
-    debugLog(`${DEBUG_PREFIX} Tool schemas converted: parametersJsonSchema → parameters`);
+  log.debug("Transforming Claude request", {
+    projectId: context.projectId,
+    model: context.model,
+    streaming: context.streaming,
+    toolCount,
+    toolsTransformed,
+  });
+
+  if (context.model === "gemini-claude-sonnet-4-5") {
+      log.debug("Using Claude Sonnet 4.5 fallback, removing thinking config if present");
+      if (requestPayload.generationConfig && (requestPayload.generationConfig as any).thinkingConfig) {
+          delete (requestPayload.generationConfig as any).thinkingConfig;
+      }
   }
 
   return {
