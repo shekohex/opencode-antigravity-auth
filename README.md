@@ -18,6 +18,28 @@ Authenticate the Opencode CLI with your Antigravity (Cloud Code) account so you 
 
 The plugin spins up a local callback listener on `http://localhost:51121/oauth-callback`, so after approving in the browser you'll land on an "Authentication complete" page with no URL copy/paste required. If that port is already taken or you're headless, the CLI automatically falls back to the copy/paste flow and explains what to do.
 
+## Google Search Tool
+
+The plugin exposes a native Google Search tool (`google_search`) that allows models to fetch real-time information from the web.
+
+### Usage
+
+The tool is automatically available to models that support tool use. You can explicitly request it in your prompt or let the model decide when to use it.
+
+```typescript
+// Example usage in OpenCode
+const response = await client.session.prompt({
+  model: "google/gemini-2.5-flash",
+  tools: { google_search: true },
+  parts: [{ type: "text", text: "What are the latest news about AI?" }]
+});
+```
+
+### Supported Models
+- **Gemini 2.5 Flash**: Fully supported (exclusive mode: other tools are disabled when search is used).
+- **Gemini 3 Pro**: Fully supported.
+- **Claude Sonnet (via Antigravity)**: Fully supported.
+
 ## Updating
 
 > [!WARNING]
