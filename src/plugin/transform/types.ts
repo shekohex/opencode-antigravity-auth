@@ -34,4 +34,6 @@ export type ToolDeclaration = {
     parameters?: Record<string, unknown>;
     parametersJsonSchema?: Record<string, unknown>;
   }>;
+  googleSearch?: Record<string, unknown>;
+  google_search?: Record<string, unknown>;
 };

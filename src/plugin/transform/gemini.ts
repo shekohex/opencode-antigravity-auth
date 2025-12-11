@@ -1,7 +1,9 @@
-import { normalizeThinkingConfig } from "../request-helpers";
 import { getCachedSignature } from "../cache";
-import { debugLog } from "../debug";
+import { createLogger } from "../logger";
+import { normalizeThinkingConfig } from "../request-helpers";
 import type { RequestPayload, TransformContext, TransformResult } from "./types";
+
+const log = createLogger("transform.gemini");
 
 /**
  * Transforms a request payload for native Gemini models.
@@ -56,7 +58,7 @@ export function transformGeminiRequest(
   const cachedContentFromExtra =
     typeof requestPayload.extra_body === "object" && requestPayload.extra_body
       ? (requestPayload.extra_body as Record<string, unknown>).cached_content ??
-        (requestPayload.extra_body as Record<string, unknown>).cachedContent
+      (requestPayload.extra_body as Record<string, unknown>).cachedContent
       : undefined;
   const cachedContent =
     (requestPayload.cached_content as string | undefined) ??
@@ -96,7 +98,7 @@ export function transformGeminiRequest(
                 if (cached) {
                   signature = cached;
                   part.thoughtSignature = cached;
-                  debugLog(`[Gemini Transform] Restored thought signature from cache`);
+                  log.debug("Restored thought signature from cache");
                 }
               }
             }
@@ -107,6 +109,11 @@ export function transformGeminiRequest(
   }
 
   requestPayload.sessionId = context.sessionId;
+
+  const googleSearchEnabled = normalizeGoogleSearchTool(requestPayload, context.model);
+  if (googleSearchEnabled) {
+    log.debug("Google Search tool enabled", { model: context.model });
+  }
 
   const wrappedBody = {
     project: context.projectId,
@@ -134,6 +141,73 @@ function countTools(payload: RequestPayload): number {
     if (Array.isArray(funcDecls)) {
       count += funcDecls.length;
     }
+    if (tool.googleSearch) {
+      count += 1;
+    }
   }
   return count;
 }
+
+export function normalizeGoogleSearchTool(payload: RequestPayload, model?: string): boolean {
+  const tools = payload.tools as Array<Record<string, unknown>> | undefined;
+  if (!Array.isArray(tools)) return false;
+
+  // Check if Google Search is requested anywhere
+  let googleSearchRequested = false;
+  for (const tool of tools) {
+    if (tool.google_search || tool.googleSearch) {
+      googleSearchRequested = true;
+      break;
+    }
+    const funcDecls = tool.functionDeclarations as Array<Record<string, unknown>> | undefined;
+    if (Array.isArray(funcDecls) && funcDecls.some(fd => fd.name === "google_search")) {
+      googleSearchRequested = true;
+      break;
+    }
+  }
+
+  if (!googleSearchRequested) return false;
+
+  // Special handling for Gemini 2.5 Flash: Exclusive Google Search (removes other tools)
+  if (model === "gemini-2.5-flash" || model === "gemini-2.5-flash-lite") {
+    payload.tools = [{ googleSearch: {} }];
+    return true;
+  }
+
+  // Standard handling (original logic)
+  let googleSearchEnabled = false;
+
+  for (const tool of tools) {
+    if (tool.google_search && !tool.googleSearch) {
+      tool.googleSearch = tool.google_search;
+      delete tool.google_search;
+      googleSearchEnabled = true;
+    }
+
+    if (tool.googleSearch) {
+      googleSearchEnabled = true;
+    }
+
+    const funcDecls = tool.functionDeclarations as Array<Record<string, unknown>> | undefined;
+    if (Array.isArray(funcDecls)) {
+      const googleSearchIndex = funcDecls.findIndex(fd => fd.name === "google_search");
+      if (googleSearchIndex !== -1) {
+        funcDecls.splice(googleSearchIndex, 1);
+        tool.googleSearch = {};
+        googleSearchEnabled = true;
+      }
+
+      if (funcDecls.length === 0) {
+        delete tool.functionDeclarations;
+      }
+    }
+  }
+
+  payload.tools = tools.filter(t =>
+    t.functionDeclarations || t.googleSearch
+  );
+
+  return googleSearchEnabled;
+}
+
+
