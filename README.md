@@ -20,25 +20,47 @@ The plugin spins up a local callback listener on `http://localhost:51121/oauth-c
 
 ## Google Search Tool
 
-The plugin exposes a native Google Search tool (`google_search`) that allows models to fetch real-time information from the web.
+The plugin exposes a `google_search` tool that allows models to fetch real-time information from the web using Google Search and URL context analysis.
+
+### How It Works
+
+Due to Gemini API limitations, native search tools (`googleSearch`, `urlContext`) cannot be combined with function declarations (custom tools like `bash`, `read`, `write`) in the same request. The plugin solves this by implementing `google_search` as a **wrapper tool** that makes separate API calls to Gemini with only native search tools enabled.
+
+```
+Agent (with custom tools: bash, read, write, etc.)
+    │
+    └── Calls google_search tool
+            │
+            └── Makes SEPARATE API call to Gemini with:
+                - Model: gemini-2.5-flash
+                - Tools: [{ googleSearch: {} }, { urlContext: {} }]
+                - Returns formatted markdown with sources
+```
+
+### Features
+
+- **Web Search**: Query Google Search for real-time information
+- **URL Analysis**: Fetch and analyze specific URLs when provided
+- **Source Citations**: Returns grounded responses with source links
+- **Thinking Mode**: Optional deep analysis with configurable thinking budget
 
 ### Usage
 
-The tool is automatically available to models that support tool use. You can explicitly request it in your prompt or let the model decide when to use it.
+The tool is automatically available to models that support tool use. Simply ask questions that require current information:
 
-```typescript
-// Example usage in OpenCode
-const response = await client.session.prompt({
-  model: "google/gemini-2.5-flash",
-  tools: { google_search: true },
-  parts: [{ type: "text", text: "What are the latest news about AI?" }]
-});
+```
+"What are the latest news about AI?"
+"Summarize this article: https://example.com/article"
+"What's the current stock price of AAPL?"
 ```
 
+When you provide URLs in your query, the model will automatically extract and analyze them.
+
 ### Supported Models
-- **Gemini 2.5 Flash**: Fully supported (exclusive mode: other tools are disabled when search is used).
-- **Gemini 3 Pro**: Fully supported.
-- **Claude Sonnet (via Antigravity)**: Fully supported.
+
+All models can use the `google_search` tool since it makes independent API calls:
+- **Gemini models** (2.5 Flash, 3 Pro, etc.)
+- **Claude models** (via Antigravity proxy)
 
 ## Updating
 
