@@ -2,7 +2,6 @@ import { randomUUID } from "node:crypto";
 import { getCachedSignature } from "../cache";
 import { createLogger } from "../logger";
 import { normalizeThinkingConfig } from "../request-helpers";
-import { normalizeGoogleSearchTool } from "./gemini";
 import type { RequestPayload, TransformContext, TransformResult } from "./types";
 
 const log = createLogger("transform.claude");
@@ -292,11 +291,6 @@ export function transformClaudeRequest(
 
 
   requestPayload.sessionId = context.sessionId;
-
-  const googleSearchEnabled = normalizeGoogleSearchTool(requestPayload);
-  if (googleSearchEnabled) {
-    log.debug("Google Search tool enabled", { model: context.model });
-  }
 
   const wrappedBody = {
     project: context.projectId,

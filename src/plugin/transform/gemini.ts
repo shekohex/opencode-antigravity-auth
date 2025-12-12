@@ -110,11 +110,6 @@ export function transformGeminiRequest(
 
   requestPayload.sessionId = context.sessionId;
 
-  const googleSearchEnabled = normalizeGoogleSearchTool(requestPayload, context.model);
-  if (googleSearchEnabled) {
-    log.debug("Google Search tool enabled", { model: context.model });
-  }
-
   const wrappedBody = {
     project: context.projectId,
     model: context.model,
@@ -144,70 +139,11 @@ function countTools(payload: RequestPayload): number {
     if (tool.googleSearch) {
       count += 1;
     }
+    if (tool.urlContext) {
+      count += 1;
+    }
   }
   return count;
-}
-
-export function normalizeGoogleSearchTool(payload: RequestPayload, model?: string): boolean {
-  const tools = payload.tools as Array<Record<string, unknown>> | undefined;
-  if (!Array.isArray(tools)) return false;
-
-  // Check if Google Search is requested anywhere
-  let googleSearchRequested = false;
-  for (const tool of tools) {
-    if (tool.google_search || tool.googleSearch) {
-      googleSearchRequested = true;
-      break;
-    }
-    const funcDecls = tool.functionDeclarations as Array<Record<string, unknown>> | undefined;
-    if (Array.isArray(funcDecls) && funcDecls.some(fd => fd.name === "google_search")) {
-      googleSearchRequested = true;
-      break;
-    }
-  }
-
-  if (!googleSearchRequested) return false;
-
-  // Special handling for Gemini 2.5 Flash: Exclusive Google Search (removes other tools)
-  if (model === "gemini-2.5-flash" || model === "gemini-2.5-flash-lite") {
-    payload.tools = [{ googleSearch: {} }];
-    return true;
-  }
-
-  // Standard handling (original logic)
-  let googleSearchEnabled = false;
-
-  for (const tool of tools) {
-    if (tool.google_search && !tool.googleSearch) {
-      tool.googleSearch = tool.google_search;
-      delete tool.google_search;
-      googleSearchEnabled = true;
-    }
-
-    if (tool.googleSearch) {
-      googleSearchEnabled = true;
-    }
-
-    const funcDecls = tool.functionDeclarations as Array<Record<string, unknown>> | undefined;
-    if (Array.isArray(funcDecls)) {
-      const googleSearchIndex = funcDecls.findIndex(fd => fd.name === "google_search");
-      if (googleSearchIndex !== -1) {
-        funcDecls.splice(googleSearchIndex, 1);
-        tool.googleSearch = {};
-        googleSearchEnabled = true;
-      }
-
-      if (funcDecls.length === 0) {
-        delete tool.functionDeclarations;
-      }
-    }
-  }
-
-  payload.tools = tools.filter(t =>
-    t.functionDeclarations || t.googleSearch
-  );
-
-  return googleSearchEnabled;
 }
 
 
