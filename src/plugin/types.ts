@@ -3,8 +3,8 @@ import type { Plugin, PluginInput } from "@opencode-ai/plugin";
 export interface OAuthAuthDetails {
   type: "oauth";
   refresh: string;
-  access?: string;
-  expires?: number;
+  access: string;
+  expires: number;
 }
 
 export interface NonOAuthAuthDetails {

@@ -10,12 +10,12 @@ import type { OAuthAuthDetails, PluginClient, RefreshParts } from "./types";
 
 interface OAuthErrorPayload {
   error?:
-    | string
-    | {
-        code?: string;
-        status?: string;
-        message?: string;
-      };
+  | string
+  | {
+    code?: string;
+    status?: string;
+    message?: string;
+  };
   error_description?: string;
 }
 
@@ -110,6 +110,8 @@ export async function refreshAccessToken(
               projectId: parts.projectId,
               managedProjectId: parts.managedProjectId,
             }),
+            access: "",
+            expires: 0,
           };
           await client.auth.set({
             path: { id: ANTIGRAVITY_PROVIDER_ID },
@@ -148,7 +150,7 @@ export async function refreshAccessToken(
     try {
       await client.auth.set({
         path: { id: ANTIGRAVITY_PROVIDER_ID },
-        body: updatedAuth,
+        body: updatedAuth as any,
       });
     } catch (storeError) {
       console.error("Failed to persist refreshed Antigravity OAuth credentials:", storeError);
