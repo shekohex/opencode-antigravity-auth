@@ -268,13 +268,19 @@ You should copy that config to your opencode config file.
 
 ## Debugging Antigravity Requests
 
-Set `OPENCODE_ANTIGRAVITY_DEBUG=1` to capture Antigravity request/response logs. Logs are written to `antigravity-debug-<ISO>.log` in the current working directory.
+Use OpenCode's built-in logging to debug Antigravity requests:
 
 ```bash
-OPENCODE_ANTIGRAVITY_DEBUG=1 opencode
+opencode --log-level DEBUG --print-logs
 ```
 
-Authorization headers are redacted; payload previews are truncated to 2 KB.
+Or just set the log level and check the log files:
+
+```bash
+opencode --log-level DEBUG
+```
+
+Log files are stored in `~/.local/share/opencode/logs/` (or `$XDG_DATA_HOME/opencode/logs/`).
 
 ## How to test with Opencode
 
