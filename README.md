@@ -290,6 +290,15 @@ Log files are stored in `~/.local/share/opencode/logs/` (or `$XDG_DATA_HOME/open
 4. Issue a Gemini model request, e.g. `opencode run -m google/gemini-2.5-flash -p "hello"` or `opencode run -m google/gemini-3-pro-high -p "solve this"`.
 5. Verify responses succeed and no API key prompt appears.
 
+## Troubleshooting
+
+### Compatibility with `opencode-skills`
+
+The [`opencode-skills`](https://github.com/malhashemi/opencode-skills) plugin is currently **incompatible** with this plugin. Using them together may cause `invalid_request_error` failures, especially with Claude thinking models, due to conflicts in message history handling.
+
+**Recommended Alternative:**
+We suggest using [openskills](https://github.com/numman-ali/openskills) instead, which provides similar functionality without these compatibility issues.
+
 ## Credits
 
 This project is based on:
