@@ -305,3 +305,42 @@ This project is based on:
 - [opencode-gemini-auth](https://github.com/jenslys/opencode-gemini-auth) - Original Gemini OAuth implementation by [@jenslys](https://github.com/jenslys)
 - [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) - Reference implementation for Antigravity API translation
 
+## Cross-Model Conversations
+
+You can switch between Claude and Gemini models within the same conversation session. The plugin handles the complexities of thinking block signatures automatically.
+
+### How It Works
+
+When models generate "thinking" blocks (extended reasoning), each provider signs them cryptographically. These signatures are provider-specific and cannot be validated across providers. The plugin solves this with:
+
+1. **Signature Caching**: Original signatures are cached before any transformation
+2. **Bypass for Gemini**: A special bypass string is used when sending to Gemini
+3. **Signature Restoration**: When returning to Claude, original signatures are restored from cache
+
+### Behavior Summary
+
+| Transition | Thinking Preserved | Notes |
+|------------|-------------------|-------|
+| Claude → Claude | ✅ All Claude thinking | Signatures validated normally |
+| Claude → Gemini | ✅ All thinking (Claude + any prior Gemini) | Bypass signature applied |
+| Gemini → Gemini | ✅ All thinking | Bypass signature applied |
+| Gemini → Claude | ✅ Claude thinking only | Gemini thinking removed (can't restore valid Claude signature for it) |
+
+### Multi-Turn Example
+
+```
+Turn 1: Claude (thinking) → "Let me analyze this..."
+Turn 2: Switch to Gemini  → Receives Claude's thinking ✅
+Turn 3: Gemini (thinking) → "Processing the request..."
+Turn 4: Switch to Claude  → Receives Claude's Turn 1 thinking ✅, Gemini's removed
+Turn 5: Switch to Gemini  → Receives all thinking (Claude + Gemini) ✅
+```
+
+### Key Points
+
+- **Gemini is permissive**: Accepts all thinking blocks with the bypass signature
+- **Claude is strict**: Only accepts thinking with valid Claude signatures
+- **No data loss for same-provider**: Staying on the same provider preserves all thinking
+- **Cross-provider has trade-offs**: Switching to Claude loses Gemini's thinking, but Claude's is always preserved via caching
+
+

@@ -1,9 +1,11 @@
-import { getCachedSignature } from "../cache";
+import { cacheSignature } from "../cache";
 import { createLogger } from "../logger";
 import { normalizeThinkingConfig } from "../request-helpers";
 import type { RequestPayload, TransformContext, TransformResult } from "./types";
 
 const log = createLogger("transform.gemini");
+
+const THOUGHT_SIGNATURE_BYPASS = "skip_thought_signature_validator";
 
 /**
  * Transforms a request payload for native Gemini models.
@@ -85,23 +87,23 @@ export function transformGeminiRequest(
   const contents = requestPayload.contents as Array<Record<string, unknown>> | undefined;
   if (Array.isArray(contents)) {
     for (const content of contents) {
+      if (content.role !== "model") continue;
+      
       const parts = content.parts as Array<Record<string, unknown>> | undefined;
       if (Array.isArray(parts)) {
         for (const part of parts) {
-          if (part.thought === true) {
-            let signature = part.thoughtSignature;
-
-            if (!signature || (typeof signature === "string" && signature.length < 50)) {
-              // Try cache
-              if (typeof part.text === "string") {
-                const cached = getCachedSignature(context.sessionId, part.text);
-                if (cached) {
-                  signature = cached;
-                  part.thoughtSignature = cached;
-                  log.debug("Restored thought signature from cache");
-                }
+          if (part.thought === true || part.thoughtSignature || part.functionCall) {
+            const existingSig = part.thoughtSignature as string | undefined;
+            
+            if (existingSig && existingSig !== THOUGHT_SIGNATURE_BYPASS && existingSig.length > 50) {
+              if (typeof part.text === "string" && context.sessionId) {
+                cacheSignature(context.sessionId, part.text, existingSig);
+                log.debug("Cached original signature before bypass", { textLen: part.text.length });
               }
             }
+            
+            part.thoughtSignature = THOUGHT_SIGNATURE_BYPASS;
+            log.debug("Applied signature bypass");
           }
         }
       }

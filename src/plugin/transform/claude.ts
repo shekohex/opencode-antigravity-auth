@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { getCachedSignature } from "../cache";
+import { cacheSignature, getCachedSignature } from "../cache";
 import { createLogger } from "../logger";
 import { normalizeThinkingConfig } from "../request-helpers";
 import type { RequestPayload, TransformContext, TransformResult } from "./types";
@@ -235,6 +235,9 @@ export function transformClaudeRequest(
           }
 
           if (typeof signature === "string" && signature.length > 50) {
+            if (typeof part.text === "string" && context.sessionId) {
+              cacheSignature(context.sessionId, part.text, signature);
+            }
             log.debug("Keeping thought part with valid signature");
           } else {
             log.warn("Invalid/missing thought signature, removing block", { signatureLen: typeof signature === 'string' ? signature.length : 0 });
