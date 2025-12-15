@@ -427,22 +427,22 @@ export const AntigravityOAuthPlugin = async ({ client }: PluginContext): Promise
                     accountManager.markRateLimited(account, retryAfterMs);
                     hitRateLimit = true;
 
-                    if (accountCount > 1) {
-                      log.info(`Account ${account.index + 1}/${accountCount} rate-limited, switching...`, {
-                        fromAccountIndex: account.index,
-                        fromAccountEmail: account.email,
-                        accountCount,
-                        retryAfterMs,
-                        reason: "rate-limit",
-                      });
+                    log.info(`Account ${account.index + 1}/${accountCount} rate-limited${accountCount > 1 ? ', switching...' : ''}`, {
+                      fromAccountIndex: account.index,
+                      fromAccountEmail: account.email,
+                      accountCount,
+                      retryAfterMs,
+                      reason: "rate-limit",
+                    });
 
-                      await client.tui.showToast({
-                        body: {
-                          message: `Rate limited on ${account.email || `Account ${account.index + 1}`}. Switching...`,
-                          variant: "warning",
-                        },
-                      });
-                    }
+                    await client.tui.showToast({
+                      body: {
+                        message: accountCount > 1
+                          ? `Rate limited on ${account.email || `Account ${account.index + 1}`}. Switching...`
+                          : `Rate limited on ${account.email || 'your account'}. Retry after ${Math.ceil(retryAfterMs / 1000)}s`,
+                        variant: "warning",
+                      },
+                    });
 
                     // Save rate limit state
                     try {
@@ -458,7 +458,7 @@ export const AntigravityOAuthPlugin = async ({ client }: PluginContext): Promise
                   }
 
                   // Handle server errors (500) on the last endpoint - treat as rate limit
-                  if (response.status >= 500 && i === CODE_ASSIST_ENDPOINT_FALLBACKS.length - 1 && accountCount > 1) {
+                  if (response.status >= 500 && i === CODE_ASSIST_ENDPOINT_FALLBACKS.length - 1) {
                     const retryAfterMs = 60000; // 60 seconds default
                     accountManager.markRateLimited(account, retryAfterMs);
                     hitRateLimit = true;
@@ -477,7 +477,9 @@ export const AntigravityOAuthPlugin = async ({ client }: PluginContext): Promise
 
                     await client.tui.showToast({
                       body: {
-                        message: `Server error on ${account.email || `Account ${account.index + 1}`}. Switching...`,
+                        message: accountCount > 1
+                          ? `Server error on ${account.email || `Account ${account.index + 1}`}. Switching...`
+                          : `Server error (${response.status}). Retry after ${Math.ceil(retryAfterMs / 1000)}s`,
                         variant: "warning",
                       },
                     });
