@@ -147,14 +147,10 @@ export async function refreshAccessToken(
     storeCachedAuth(updatedAuth);
     invalidateProjectContextCache(auth.refresh);
 
-    try {
-      await client.auth.set({
-        path: { id: ANTIGRAVITY_PROVIDER_ID },
-        body: updatedAuth as any,
-      });
-    } catch (storeError) {
-      console.error("Failed to persist refreshed Antigravity OAuth credentials:", storeError);
-    }
+    // NOTE: We don't save to client.auth.set here because it would overwrite
+    // the multi-account refresh string with just this single account.
+    // The caller (plugin.ts) handles saving via accountManager.toAuthDetails()
+    // which properly preserves all accounts.
 
     return updatedAuth;
   } catch (error) {

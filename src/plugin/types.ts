@@ -49,6 +49,10 @@ export interface RefreshParts {
   managedProjectId?: string;
 }
 
+export interface MultiAccountRefreshParts {
+  accounts: RefreshParts[];
+}
+
 export interface ProjectContextResult {
   auth: OAuthAuthDetails;
   effectiveProjectId: string;

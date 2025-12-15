@@ -2,6 +2,14 @@
 
 Authenticate the Opencode CLI with your Antigravity (Cloud Code) account so you can use the Antigravity-backed Gemini models with your existing quota.
 
+## Features
+
+- **Multi-Account Load Balancing** - Automatically rotates between multiple Google accounts when hitting rate limits
+- **Endpoint Fallback** - Tries 3 endpoints (daily → autopush → prod) for maximum reliability
+- **Google Search Tool** - Built-in web search with URL analysis and source citations
+- **Cross-Model Conversations** - Seamlessly switch between Gemini and Claude with thinking block preservation
+- **Automatic Token Refresh** - Handles auth transparently with no manual intervention
+
 ## Setup
 
 1. Add the plugin to your [Opencode config](https://opencode.ai/docs/config/):
@@ -14,9 +22,50 @@ Authenticate the Opencode CLI with your Antigravity (Cloud Code) account so you 
    ```
 
 2. Run `opencode auth login`.
-3. Choose the Google provider and select **OAuth with Antigravity**.
+3. Choose the Google provider and select **OAuth with Google (Antigravity)**.
+4. Authenticate with your first Google account in the browser.
+5. **Optional:** Add more accounts for load balancing when prompted.
 
 The plugin spins up a local callback listener on `http://localhost:51121/oauth-callback`, so after approving in the browser you'll land on an "Authentication complete" page with no URL copy/paste required. If that port is already taken or you're headless, the CLI automatically falls back to the copy/paste flow and explains what to do.
+
+## Multi-Account Load Balancing
+
+The plugin supports **automatic rotation across multiple Google accounts** to work around rate limits.
+
+### How It Works
+
+- **Sticky Account Selection**: Uses the same account for all requests until it hits an error
+- **Automatic Rotation**: When rate-limited (429) or server errors (5xx), switches to next account
+- **Smart Recovery**: Automatically re-enables accounts after rate limit timeout expires
+- **Email Tracking**: Shows which account is in use for easy debugging
+
+### Setup Multiple Accounts
+
+During `opencode auth login`, you'll be prompted to add additional accounts:
+
+```
+✓ Account 1 authenticated (user@gmail.com)
+You have 1 account(s) configured. Add another? (y/n): y
+```
+
+You can add up to 10 accounts. The plugin stores account metadata in `$XDG_DATA_HOME/opencode/antigravity-accounts.json` (for example `~/.local/share/opencode/antigravity-accounts.json`).
+
+### When To Use Multi-Account
+
+- **High Volume Usage**: If you frequently hit Antigravity rate limits
+- **Production Workflows**: Need maximum uptime for automated tasks
+- **Team Environments**: Share quota across multiple Google accounts
+
+### Monitoring
+
+The plugin logs account switches:
+```
+[INFO] Using account 1/3 (user@gmail.com)
+[INFO] Account 1/3 rate-limited, switching...
+[INFO] Using account 2/3 (user2@gmail.com)
+```
+
+Toast notifications also appear when switching accounts.
 
 ## Google Search Tool
 

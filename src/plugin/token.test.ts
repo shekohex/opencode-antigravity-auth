@@ -26,7 +26,7 @@ describe("refreshAccessToken", () => {
     mock.restore();
   });
 
-  it("updates the caller and persists the refreshed token", async () => {
+  it("updates the caller and returns refreshed token", async () => {
     const client = createClient();
     const fetchMock = mock(async () => {
       return new Response(
@@ -42,10 +42,11 @@ describe("refreshAccessToken", () => {
     const result = await refreshAccessToken(baseAuth, client);
 
     expect(result?.access).toBe("new-access");
-    expect(client.auth.set.mock.calls.length).toBe(1);
+    // Note: refreshAccessToken no longer saves immediately - caller handles saving
+    expect(client.auth.set.mock.calls.length).toBe(0);
   });
 
-  it("persists when Google rotates the refresh token", async () => {
+  it("handles when Google rotates the refresh token", async () => {
     const client = createClient();
     const fetchMock = mock(async () => {
       return new Response(
@@ -62,13 +63,8 @@ describe("refreshAccessToken", () => {
     const result = await refreshAccessToken(baseAuth, client);
 
     expect(result?.access).toBe("next-access");
-    expect(client.auth.set.mock.calls.length).toBe(1);
-    expect(client.auth.set.mock.calls[0]?.[0]).toEqual({
-      path: { id: ANTIGRAVITY_PROVIDER_ID },
-      body: expect.objectContaining({
-        type: "oauth",
-        refresh: expect.stringContaining("rotated-token"),
-      }),
-    });
+    expect(result?.refresh).toContain("rotated-token");
+    // Note: refreshAccessToken no longer saves immediately - caller handles saving
+    expect(client.auth.set.mock.calls.length).toBe(0);
   });
 });

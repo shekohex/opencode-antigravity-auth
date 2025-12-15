@@ -15,7 +15,26 @@ export const ANTIGRAVITY_USER_AGENT = "antigravity/1.11.5 windows/amd64";
 export const ANTIGRAVITY_API_CLIENT = "google-cloud-sdk vscode_cloudshelleditor/0.1";
 export const ANTIGRAVITY_CLIENT_METADATA = '{"ideType":"IDE_UNSPECIFIED","platform":"PLATFORM_UNSPECIFIED","pluginType":"GEMINI"}';
 
-export const CODE_ASSIST_ENDPOINT = "https://daily-cloudcode-pa.sandbox.googleapis.com";
+/**
+ * Root endpoints for the Antigravity API (in fallback order).
+ */
+export const CODE_ASSIST_ENDPOINT_DAILY = "https://daily-cloudcode-pa.sandbox.googleapis.com";
+export const CODE_ASSIST_ENDPOINT_AUTOPUSH = "https://autopush-cloudcode-pa.sandbox.googleapis.com";
+export const CODE_ASSIST_ENDPOINT_PROD = "https://cloudcode-pa.googleapis.com";
+
+/**
+ * Endpoint fallback order (daily → autopush → prod).
+ */
+export const CODE_ASSIST_ENDPOINT_FALLBACKS = [
+  CODE_ASSIST_ENDPOINT_DAILY,
+  CODE_ASSIST_ENDPOINT_AUTOPUSH,
+  CODE_ASSIST_ENDPOINT_PROD,
+] as const;
+
+/**
+ * Primary endpoint to use (daily sandbox - same as CLIProxy/Vibeproxy).
+ */
+export const CODE_ASSIST_ENDPOINT = CODE_ASSIST_ENDPOINT_DAILY;
 export const CODE_ASSIST_API_VERSION = "v1internal";
 
 export const CODE_ASSIST_HEADERS = {
@@ -30,3 +49,5 @@ export const SEARCH_MODEL = "gemini-2.5-flash";
 export const SEARCH_THINKING_BUDGET_FAST = 4096;
 export const SEARCH_THINKING_BUDGET_DEEP = 16384;
 export const SEARCH_TIMEOUT_MS = 60 * 1000;
+
+export const MAX_ACCOUNTS = 10;

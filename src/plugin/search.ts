@@ -199,6 +199,7 @@ export async function executeSearch(
   args: SearchArgs,
   accessToken: string,
   projectId: string,
+  abortSignal?: AbortSignal,
 ): Promise<string> {
   const { query, urls, thinking = true } = args;
 
@@ -264,7 +265,7 @@ export async function executeSearch(
         "Content-Type": "application/json",
       },
       body: JSON.stringify(wrappedBody),
-      signal: AbortSignal.timeout(SEARCH_TIMEOUT_MS),
+      signal: abortSignal ?? AbortSignal.timeout(SEARCH_TIMEOUT_MS),
     });
 
     if (!response.ok) {

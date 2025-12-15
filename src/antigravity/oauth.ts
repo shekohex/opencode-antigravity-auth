@@ -5,6 +5,8 @@ import {
     ANTIGRAVITY_CLIENT_SECRET,
     ANTIGRAVITY_REDIRECT_URI,
     ANTIGRAVITY_SCOPES,
+    CODE_ASSIST_ENDPOINT_FALLBACKS,
+    CODE_ASSIST_HEADERS,
 } from "../constants";
 
 interface PkcePair {
@@ -67,6 +69,72 @@ function decodeState(state: string): AntigravityAuthState {
     verifier: parsed.verifier,
     projectId: typeof parsed.projectId === "string" ? parsed.projectId : "",
   };
+}
+
+/**
+ * Automatically discover project ID from Antigravity API.
+ * Tries multiple endpoints to find the user's default project.
+ */
+async function fetchProjectID(accessToken: string): Promise<string> {
+  const errors: string[] = [];
+  
+  const loadHeaders: Record<string, string> = {
+    Authorization: `Bearer ${accessToken}`,
+    "Content-Type": "application/json",
+    ...CODE_ASSIST_HEADERS,
+  };
+
+  for (const baseEndpoint of CODE_ASSIST_ENDPOINT_FALLBACKS) {
+    try {
+      const url = `${baseEndpoint}/v1internal:loadCodeAssist`;
+      const response = await fetch(url, {
+        method: "POST",
+        headers: loadHeaders,
+        body: JSON.stringify({
+          metadata: {
+            ideType: "IDE_UNSPECIFIED",
+            platform: "PLATFORM_UNSPECIFIED",
+            pluginType: "GEMINI",
+          },
+        }),
+      });
+
+      if (!response.ok) {
+        const message = await response.text().catch(() => "");
+        errors.push(
+          `loadCodeAssist ${response.status} at ${baseEndpoint}${
+            message ? `: ${message}` : ""
+          }`,
+        );
+        continue;
+      }
+
+      const data = await response.json();
+      if (typeof data.cloudaicompanionProject === "string" && data.cloudaicompanionProject) {
+        return data.cloudaicompanionProject;
+      }
+      if (
+        data.cloudaicompanionProject &&
+        typeof data.cloudaicompanionProject.id === "string" &&
+        data.cloudaicompanionProject.id
+      ) {
+        return data.cloudaicompanionProject.id;
+      }
+
+      errors.push(`loadCodeAssist missing project id at ${baseEndpoint}`);
+    } catch (e) {
+      errors.push(
+        `loadCodeAssist error at ${baseEndpoint}: ${
+          e instanceof Error ? e.message : String(e)
+        }`,
+      );
+    }
+  }
+
+  if (errors.length) {
+    console.warn("Failed to resolve Antigravity project via loadCodeAssist:", errors.join("; "));
+  }
+  return "";
 }
 
 export async function authorizeAntigravity(projectId = ""): Promise<AntigravityAuthorization> {
@@ -140,8 +208,14 @@ export async function exchangeAntigravity(
       return { type: "failed", error: "Missing refresh token in response" };
     }
 
-    const email = userInfo.email || "";
-    const storedRefresh = `${refreshToken}|${projectId || ""}|${email}`;
+    // Auto-discover project ID if not provided
+    let effectiveProjectId = projectId;
+    if (!effectiveProjectId) {
+      effectiveProjectId = await fetchProjectID(tokenPayload.access_token);
+    }
+
+    // Don't embed email in refresh token - we store it separately in accounts.json
+    const storedRefresh = `${refreshToken}|${effectiveProjectId || ""}`;
 
     return {
       type: "success",
@@ -149,7 +223,7 @@ export async function exchangeAntigravity(
       access: tokenPayload.access_token,
       expires: Date.now() + tokenPayload.expires_in * 1000,
       email: userInfo.email,
-      projectId: projectId || "",
+      projectId: effectiveProjectId || "",
     };
   } catch (error) {
     return {

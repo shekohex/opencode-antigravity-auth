@@ -1,28 +1,25 @@
 import { tool } from "@opencode-ai/plugin";
 import type { AntigravityTokenExchangeResult } from "./antigravity/oauth";
 import { authorizeAntigravity, exchangeAntigravity } from "./antigravity/oauth";
-import { ANTIGRAVITY_PROVIDER_ID, ANTIGRAVITY_REDIRECT_URI } from "./constants";
-import { accessTokenExpired, isOAuthAuth } from "./plugin/auth";
-import { promptProjectId } from "./plugin/cli";
-import { startAntigravityDebugRequest } from "./plugin/debug";
+import { ANTIGRAVITY_PROVIDER_ID, MAX_ACCOUNTS } from "./constants";
+import { accessTokenExpired, isOAuthAuth, parseRefreshParts, formatMultiAccountRefresh } from "./plugin/auth";
+import { AccountManager } from "./plugin/accounts";
+import { openBrowser } from "./plugin/browser";
+import { promptProjectId, promptAddAnotherAccount } from "./plugin/cli";
+import { createAntigravityFetch } from "./plugin/fetch-wrapper";
 import { createLogger, initLogger } from "./plugin/logger";
 import { ensureProjectContext } from "./plugin/project";
-import {
-  isGenerativeLanguageRequest,
-  prepareAntigravityRequest,
-  transformAntigravityResponse,
-} from "./plugin/request";
-import { getSessionId, toUrlString } from "./plugin/request-helpers";
 import { executeSearch } from "./plugin/search";
 import { startOAuthListener, type OAuthListener } from "./plugin/server";
+import { loadAccounts, saveAccounts } from "./plugin/storage";
 import { refreshAccessToken } from "./plugin/token";
 import type {
   GetAuth,
   LoaderResult,
   PluginContext,
   PluginResult,
-  ProjectContextResult,
   Provider,
+  RefreshParts,
 } from "./plugin/types";
 
 const log = createLogger("plugin");
@@ -36,13 +33,32 @@ async function getAuthContext(
     return null;
   }
 
-  let authRecord = auth;
+  const storedAccounts = await loadAccounts();
+  const accountManager = new AccountManager(auth, storedAccounts);
+  const account = accountManager.getCurrentOrNext();
+  if (!account) {
+    return null;
+  }
+
+  let authRecord = accountManager.accountToAuth(account);
+
   if (accessTokenExpired(authRecord)) {
     const refreshed = await refreshAccessToken(authRecord, client);
     if (!refreshed) {
       return null;
     }
+
     authRecord = refreshed;
+    const parts = parseRefreshParts(refreshed.refresh);
+    accountManager.updateAccount(account, refreshed.access!, refreshed.expires!, parts);
+
+    try {
+      await client.auth.set({
+        path: { id: ANTIGRAVITY_PROVIDER_ID },
+        body: accountManager.toAuthDetails(),
+      });
+      await accountManager.save();
+    } catch {}
   }
 
   const accessToken = authRecord.access;
@@ -66,7 +82,7 @@ function createGoogleSearchTool(getAuth: GetAuth, client: PluginContext["client"
       urls: tool.schema.array(tool.schema.string()).optional().describe("List of specific URLs to fetch and analyze. IMPORTANT: Always extract and include any URLs mentioned by the user in their query here."),
       thinking: tool.schema.boolean().optional().default(true).describe("Enable deep thinking for more thorough analysis (default: true)"),
     },
-    async execute(args, _ctx) {
+    async execute(args, ctx) {
       log.debug("Google Search tool called", { query: args.query, urlCount: args.urls?.length ?? 0 });
 
       const authContext = await getAuthContext(getAuth, client);
@@ -82,18 +98,141 @@ function createGoogleSearchTool(getAuth: GetAuth, client: PluginContext["client"
         },
         authContext.accessToken,
         authContext.projectId,
+        ctx.abort,
       );
     },
   });
 }
 
-/**
- * Registers the Antigravity OAuth provider for Opencode, handling auth, request rewriting,
- * debug logging, and response normalization for Antigravity Code Assist endpoints.
- */
-export const AntigravityOAuthPlugin = async (
-  { client }: PluginContext,
-): Promise<PluginResult> => {
+async function authenticateSingleAccount(
+  client: PluginContext["client"],
+  isHeadless: boolean,
+): Promise<{ refresh: string; access: string; expires: number; projectId: string; email?: string } | null> {
+  let listener: OAuthListener | null = null;
+  if (!isHeadless) {
+    try {
+      listener = await startOAuthListener();
+    } catch (error) {
+      await client.tui.showToast({
+        body: {
+          message: "Couldn't start callback listener. Falling back to manual copy/paste.",
+          variant: "warning",
+        },
+      });
+    }
+  }
+
+  const projectId = await promptProjectId();
+  const authorization = await authorizeAntigravity(projectId);
+
+  if (!isHeadless) {
+    try {
+      await openBrowser(authorization.url);
+    } catch {
+      await client.tui.showToast({
+        body: {
+          message: "Could not open browser automatically. Please copy/paste the URL.",
+          variant: "warning",
+        },
+      });
+    }
+  }
+
+  let result: AntigravityTokenExchangeResult;
+
+  if (listener) {
+    await client.tui.showToast({
+      body: {
+        message: "Waiting for browser authentication...",
+        variant: "info",
+      },
+    });
+    try {
+      const callbackUrl = await listener.waitForCallback();
+      const code = callbackUrl.searchParams.get("code");
+      const state = callbackUrl.searchParams.get("state");
+
+      if (!code || !state) {
+        await client.tui.showToast({
+          body: {
+            message: "Missing code or state in callback URL",
+            variant: "error",
+          },
+        });
+        return null;
+      }
+
+      result = await exchangeAntigravity(code, state);
+    } catch (error) {
+      await client.tui.showToast({
+        body: {
+          message: `Authentication failed: ${error instanceof Error ? error.message : "Unknown error"}`,
+          variant: "error",
+        },
+      });
+      return null;
+    } finally {
+      try {
+        await listener.close();
+      } catch {}
+    }
+  } else {
+    console.log("\n=== Antigravity OAuth Setup ===");
+    console.log(`Open this URL in your browser: ${authorization.url}\n`);
+    const { createInterface } = await import("node:readline/promises");
+    const { stdin, stdout } = await import("node:process");
+    const rl = createInterface({ input: stdin, output: stdout });
+
+    try {
+      const callbackUrlStr = await rl.question("Paste the full redirect URL here: ");
+      const callbackUrl = new URL(callbackUrlStr);
+      const code = callbackUrl.searchParams.get("code");
+      const state = callbackUrl.searchParams.get("state");
+
+      if (!code || !state) {
+        await client.tui.showToast({
+          body: {
+            message: "Missing code or state in callback URL",
+            variant: "error",
+          },
+        });
+        return null;
+      }
+
+      result = await exchangeAntigravity(code, state);
+    } catch (error) {
+      await client.tui.showToast({
+        body: {
+          message: `Authentication failed: ${error instanceof Error ? error.message : "Unknown error"}`,
+          variant: "error",
+        },
+      });
+      return null;
+    } finally {
+      rl.close();
+    }
+  }
+
+  if (result.type === "failed") {
+    await client.tui.showToast({
+      body: {
+        message: `Authentication failed: ${result.error}`,
+        variant: "error",
+      },
+    });
+    return null;
+  }
+
+  return {
+    refresh: result.refresh,
+    access: result.access,
+    expires: result.expires,
+    projectId: result.projectId,
+    email: result.email,
+  };
+}
+
+export const AntigravityOAuthPlugin = async ({ client }: PluginContext): Promise<PluginResult> => {
   initLogger(client);
 
   let cachedGetAuth: GetAuth | null = null;
@@ -116,85 +255,18 @@ export const AntigravityOAuthPlugin = async (
           }
         }
 
+        const antigravityFetch = createAntigravityFetch(getAuth, client);
+
         return {
           apiKey: "",
-          async fetch(input, init) {
-            if (!isGenerativeLanguageRequest(input)) {
-              return fetch(input, init);
-            }
-
-            const latestAuth = await getAuth();
-            if (!isOAuthAuth(latestAuth)) {
-              return fetch(input, init);
-            }
-
-            let authRecord = latestAuth;
-            if (accessTokenExpired(authRecord)) {
-              const refreshed = await refreshAccessToken(authRecord, client);
-              if (!refreshed) {
-                return fetch(input, init);
-              }
-              authRecord = refreshed;
-            }
-
-            const accessToken = authRecord.access;
-            if (!accessToken) {
-              return fetch(input, init);
-            }
-
-            /**
-             * Ensures we have a usable project context for the current auth snapshot.
-             */
-            async function resolveProjectContext(): Promise<ProjectContextResult> {
-              try {
-                return await ensureProjectContext(authRecord, client);
-              } catch (error) {
-                if (error instanceof Error) {
-                  console.error(error.message);
-                }
-                throw error;
-              }
-            }
-
-            const projectContext = await resolveProjectContext();
-
-            const {
-              request,
-              init: transformedInit,
-              streaming,
-              requestedModel,
-            } = await prepareAntigravityRequest(
-              input,
-              init,
-              accessToken,
-              projectContext.effectiveProjectId,
-            );
-
-            const originalUrl = toUrlString(input);
-            const resolvedUrl = toUrlString(request);
-            const debugContext = startAntigravityDebugRequest({
-              originalUrl,
-              resolvedUrl,
-              method: transformedInit.method,
-              headers: transformedInit.headers,
-              body: transformedInit.body,
-              streaming,
-              projectId: projectContext.effectiveProjectId,
-              sessionId: getSessionId(),
-            });
-
-            const response = await fetch(request, transformedInit);
-            return transformAntigravityResponse(response, streaming, client, debugContext, requestedModel, getSessionId());
-          },
+          fetch: antigravityFetch,
         };
       },
       methods: [
         {
-          label: "OAuth with Antigravity",
+          label: "OAuth with Google (Antigravity)",
           type: "oauth",
           authorize: async () => {
-            console.log("\n=== Antigravity OAuth Setup ===");
-
             const isHeadless = !!(
               process.env.SSH_CONNECTION ||
               process.env.SSH_CLIENT ||
@@ -202,105 +274,98 @@ export const AntigravityOAuthPlugin = async (
               process.env.OPENCODE_HEADLESS
             );
 
-            let listener: OAuthListener | null = null;
-            if (!isHeadless) {
-              try {
-                listener = await startOAuthListener();
-                const { host } = new URL(ANTIGRAVITY_REDIRECT_URI);
-                console.log("1. You'll be asked to sign in to your Google account and grant permission.");
-                console.log(
-                  `2. We'll automatically capture the browser redirect on http://${host}. No need to paste anything back here.`,
-                );
-                console.log("3. Once you see the 'Authentication complete' page in your browser, return to this terminal.");
-              } catch (error) {
-                console.log("1. You'll be asked to sign in to your Google account and grant permission.");
-                console.log("2. After you approve, the browser will try to redirect to a 'localhost' page.");
-                console.log(
-                  "3. This page will show an error like 'This site can't be reached'. This is perfectly normal and means it worked!",
-                );
-                console.log(
-                  "4. Once you see that error, copy the entire URL from the address bar, paste it back here, and press Enter.",
-                );
-                if (error instanceof Error) {
-                  console.log(`\nWarning: Couldn't start the local callback listener (${error.message}). Falling back to manual copy/paste.`);
-                } else {
-                  console.log("\nWarning: Couldn't start the local callback listener. Falling back to manual copy/paste.");
-                }
-              }
-            } else {
-              console.log("Headless environment detected. Using manual OAuth flow.");
-              console.log("1. You'll be asked to sign in to your Google account and grant permission.");
-              console.log("2. After you approve, the browser will redirect to a 'localhost' URL.");
-              console.log(
-                "3. Copy the ENTIRE URL from your browser's address bar (it will look like: http://localhost:51121/oauth-callback?code=...&state=...)",
-              );
-              console.log("4. Paste the URL back here and press Enter.");
-            }
-            console.log("\n");
+            const accounts: Array<{
+              refresh: string;
+              access: string;
+              expires: number;
+              projectId: string;
+              email?: string;
+            }> = [];
 
-            const projectId = await promptProjectId();
-            const authorization = await authorizeAntigravity(projectId);
-
-            if (listener) {
+            const firstAccount = await authenticateSingleAccount(client, isHeadless);
+            if (!firstAccount) {
               return {
-                url: authorization.url,
-                instructions:
-                  "Complete the sign-in flow in your browser. We'll automatically detect the redirect back to localhost.",
+                url: "",
+                instructions: "Authentication cancelled",
                 method: "auto",
-                callback: async (): Promise<AntigravityTokenExchangeResult> => {
-                  try {
-                    const callbackUrl = await listener.waitForCallback();
-                    const code = callbackUrl.searchParams.get("code");
-                    const state = callbackUrl.searchParams.get("state");
-
-                    if (!code || !state) {
-                      return {
-                        type: "failed",
-                        error: "Missing code or state in callback URL",
-                      };
-                    }
-
-                    return await exchangeAntigravity(code, state);
-                  } catch (error) {
-                    return {
-                      type: "failed",
-                      error: error instanceof Error ? error.message : "Unknown error",
-                    };
-                  } finally {
-                    try {
-                      await listener?.close();
-                    } catch {
-                    }
-                  }
-                },
+                callback: async () => ({ type: "failed" as const, error: "Authentication cancelled" }),
               };
             }
 
+            accounts.push(firstAccount);
+            await client.tui.showToast({
+              body: {
+                message: `Account 1 authenticated${firstAccount.email ? ` (${firstAccount.email})` : ""}`,
+                variant: "success",
+              },
+            });
+
+            while (accounts.length < MAX_ACCOUNTS) {
+              const addAnother = await promptAddAnotherAccount(accounts.length);
+              if (!addAnother) {
+                break;
+              }
+
+              const nextAccount = await authenticateSingleAccount(client, isHeadless);
+
+              if (!nextAccount) {
+                await client.tui.showToast({
+                  body: {
+                    message: "Skipping this account...",
+                    variant: "warning",
+                  },
+                });
+                continue;
+              }
+
+              accounts.push(nextAccount);
+              await client.tui.showToast({
+                body: {
+                  message: `Account ${accounts.length} authenticated${nextAccount.email ? ` (${nextAccount.email})` : ""}`,
+                  variant: "success",
+                },
+              });
+            }
+
+            const refreshParts: RefreshParts[] = accounts.map((acc) => ({
+              refreshToken: acc.refresh,
+              projectId: acc.projectId,
+              managedProjectId: undefined,
+            }));
+
+            const combinedRefresh = formatMultiAccountRefresh({ accounts: refreshParts });
+
+            try {
+              await saveAccounts({
+                version: 1,
+                accounts: accounts.map((acc, index) => ({
+                  email: acc.email,
+                  refreshToken: acc.refresh,
+                  projectId: acc.projectId,
+                  managedProjectId: undefined,
+                  addedAt: Date.now(),
+                  lastUsed: index === 0 ? Date.now() : 0,
+                })),
+                activeIndex: 0,
+              });
+            } catch (error) {
+              console.error("[antigravity-auth] Failed to save account metadata:", error);
+            }
+
+            const firstAcc = accounts[0]!;
             return {
-              url: authorization.url,
-              instructions:
-                "Visit the URL above, complete OAuth, ignore the localhost connection error, and paste the full redirected URL (e.g., http://localhost:51121/oauth-callback?code=...&state=...): ",
-              method: "code",
-              callback: async (callbackUrl: string): Promise<AntigravityTokenExchangeResult> => {
-                try {
-                  const url = new URL(callbackUrl);
-                  const code = url.searchParams.get("code");
-                  const state = url.searchParams.get("state");
-
-                  if (!code || !state) {
-                    return {
-                      type: "failed",
-                      error: "Missing code or state in callback URL",
-                    };
-                  }
-
-                  return exchangeAntigravity(code, state);
-                } catch (error) {
-                  return {
-                    type: "failed",
-                    error: error instanceof Error ? error.message : "Unknown error",
-                  };
-                }
+              url: "",
+              instructions: "Multi-account setup complete!",
+              method: "auto",
+              callback: async (): Promise<AntigravityTokenExchangeResult> => {
+                return {
+                  type: "success",
+                  refresh: combinedRefresh,
+                  access: firstAcc.access,
+                  expires: firstAcc.expires,
+                  email: firstAcc.email,
+                  projectId: firstAcc.projectId,
+                };
               },
             };
           },
@@ -311,10 +376,10 @@ export const AntigravityOAuthPlugin = async (
           prompts: [
             {
               type: "text",
-              message: 'Enter your Google API Key',
-              key: 'apiKey',
-            }
-          ]
+              message: "Enter your Google API Key",
+              key: "apiKey",
+            },
+          ],
         },
       ],
     },
@@ -328,4 +393,3 @@ export const AntigravityOAuthPlugin = async (
     },
   };
 };
-
