@@ -442,40 +442,41 @@ This project is based on:
 
 ## Cross-Model Conversations
 
-You can switch between Claude and Gemini models within the same conversation session. The plugin handles the complexities of thinking block signatures automatically.
+You can switch between Claude and Gemini models within the same conversation session. The plugin handles the complexities of thinking block signatures with **family-independent caching**.
 
 ### How It Works
 
 When models generate "thinking" blocks (extended reasoning), each provider signs them cryptographically. These signatures are provider-specific and cannot be validated across providers. The plugin solves this with:
 
-1. **Signature Caching**: Original signatures are cached before any transformation
-2. **Bypass for Gemini**: A special bypass string is used when sending to Gemini
-3. **Signature Restoration**: When returning to Claude, original signatures are restored from cache
+1. **Family-Independent Cache**: Signatures are cached per model family (`claude` or `gemini`), preventing cross-contamination
+2. **Response Caching**: When a model responds with thinking, the signature is cached in that family's namespace
+3. **Request Restoration**: When sending a request, thinking blocks are restored from the same family's cache
+4. **Foreign Removal**: Thinking blocks not found in the current family's cache are removed (they're from another family)
 
 ### Behavior Summary
 
 | Transition | Thinking Preserved | Notes |
 |------------|-------------------|-------|
-| Claude → Claude | ✅ All Claude thinking | Signatures validated normally |
-| Claude → Gemini | ✅ All thinking (Claude + any prior Gemini) | Bypass signature applied |
-| Gemini → Gemini | ✅ All thinking | Bypass signature applied |
-| Gemini → Claude | ✅ Claude thinking only | Gemini thinking removed (can't restore valid Claude signature for it) |
+| Claude → Claude | ✅ All Claude thinking | Signatures restored from Claude cache |
+| Gemini → Gemini | ✅ All Gemini thinking | Signatures restored from Gemini cache |
+| Claude → Gemini | ❌ Claude thinking removed | Not in Gemini's cache |
+| Gemini → Claude | ❌ Gemini thinking removed | Not in Claude's cache |
 
 ### Multi-Turn Example
 
 ```
-Turn 1: Claude (thinking) → "Let me analyze this..."
-Turn 2: Switch to Gemini  → Receives Claude's thinking ✅
-Turn 3: Gemini (thinking) → "Processing the request..."
-Turn 4: Switch to Claude  → Receives Claude's Turn 1 thinking ✅, Gemini's removed
-Turn 5: Switch to Gemini  → Receives all thinking (Claude + Gemini) ✅
+Turn 1: Claude (thinking) → "Let me analyze this..." [cached in Claude family]
+Turn 2: Switch to Gemini  → Claude's thinking removed, only text preserved
+Turn 3: Gemini (thinking) → "Processing..." [cached in Gemini family]  
+Turn 4: Switch to Claude  → Gemini's thinking removed, Claude Turn 1 restored ✅
+Turn 5: Switch to Gemini  → Claude's thinking removed, Gemini Turn 3 restored ✅
 ```
 
 ### Key Points
 
-- **Gemini is permissive**: Accepts all thinking blocks with the bypass signature
-- **Claude is strict**: Only accepts thinking with valid Claude signatures
-- **No data loss for same-provider**: Staying on the same provider preserves all thinking
-- **Cross-provider has trade-offs**: Switching to Claude loses Gemini's thinking, but Claude's is always preserved via caching
+- **Family isolation**: Claude and Gemini thinking are cached separately
+- **No cross-contamination**: Impossible for signatures to leak between families
+- **Conversation text preserved**: Only thinking blocks are removed; actual response text flows through normally
+- **Same-provider continuity**: Each family maintains its own thinking history across model switches
 
 
