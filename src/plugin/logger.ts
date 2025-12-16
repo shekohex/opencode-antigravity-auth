@@ -2,6 +2,37 @@ import type { PluginClient } from "./types";
 
 type LogLevel = "debug" | "info" | "warn" | "error";
 
+type ConsoleLogLevel = "debug" | "info" | "warn" | "error";
+
+const ANTIGRAVITY_CONSOLE_PREFIX = "[Antigravity]";
+
+export function printAntigravityConsole(
+  level: ConsoleLogLevel,
+  message: string,
+  extra?: unknown,
+  linesBefore: number = 1,
+): void {
+  const pad = "\n".repeat(Math.max(0, Math.floor(linesBefore)));
+  const prefixedMessage = `${ANTIGRAVITY_CONSOLE_PREFIX} ${message}`;
+
+  const args = extra === undefined ? [pad + prefixedMessage] : [pad + prefixedMessage, extra];
+
+  switch (level) {
+    case "debug":
+      console.debug(...args);
+      break;
+    case "info":
+      console.info(...args);
+      break;
+    case "warn":
+      console.warn(...args);
+      break;
+    case "error":
+      console.error(...args);
+      break;
+  }
+}
+
 interface Logger {
   debug(message: string, extra?: Record<string, unknown>): void;
   info(message: string, extra?: Record<string, unknown>): void;
