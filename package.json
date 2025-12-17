@@ -27,7 +27,6 @@
   "license": "MIT",
   "type": "module",
   "devDependencies": {
-    "@opencode-ai/plugin": "^1.0.164",
     "@opencode-ai/sdk": "^1.0.164",
     "@types/bun": "latest"
   },
@@ -35,6 +34,7 @@
     "typescript": "^5"
   },
   "dependencies": {
+    "@opencode-ai/plugin": "^1.0.164",
     "@openauthjs/openauth": "^0.4.3",
     "open": "^11.0.0"
   }

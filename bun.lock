@@ -5,10 +5,10 @@
       "name": "opencode-gemini-auth",
       "dependencies": {
         "@openauthjs/openauth": "^0.4.3",
+        "@opencode-ai/plugin": "^1.0.164",
         "open": "^11.0.0",
       },
       "devDependencies": {
-        "@opencode-ai/plugin": "^1.0.164",
         "@opencode-ai/sdk": "^1.0.164",
         "@types/bun": "latest",
       },
