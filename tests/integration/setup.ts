@@ -11,6 +11,7 @@ export interface TestContext {
 export const TEST_MODELS = {
   gemini25Flash: { providerID: "google", modelID: "gemini-2.5-flash" },
   gemini3Pro: { providerID: "google", modelID: "gemini-3-pro-preview" },
+  gemini3Flash: { providerID: "google", modelID: "gemini-3-flash" },
   claudeSonnet: { providerID: "google", modelID: "gemini-claude-sonnet-4-5-thinking-medium" },
 } as const;
 

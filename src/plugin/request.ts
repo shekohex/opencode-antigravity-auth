@@ -71,7 +71,7 @@ function transformSseLine(line: string, onError?: (body: GeminiApiBody) => Gemin
   }
   try {
     let parsed = JSON.parse(json) as unknown;
-    
+
     // Handle array-wrapped responses
     if (Array.isArray(parsed)) {
       parsed = parsed.find((item) => typeof item === "object" && item !== null);
@@ -127,7 +127,7 @@ export function createSseTransformStream(onError?: (body: GeminiApiBody) => Gemi
           if (!sessionId || !family) return;
           const response = body.response as any;
           if (!response?.candidates) return;
-          
+
           response.candidates.forEach((candidate: any, index: number) => {
             if (candidate.groundingMetadata) {
               log.debug("SSE Grounding metadata found", { groundingMetadata: candidate.groundingMetadata });
@@ -199,17 +199,17 @@ export async function prepareAntigravityRequest(
       new Headers(init.headers).forEach((value, key) => reqHeaders.set(key, value));
     }
     requestInit.headers = reqHeaders;
-    
+
     // If body isn't in init, try to get it from request
     if (!originalBody && input.body) {
       // We need to clone to avoid consuming the original request if possible, 
       // but standard Request cloning is sync. 
       // We'll try to read text if we can.
       try {
-         // Note: If input is a Request object that has been used, this might fail.
-         // But usually in this context it's fresh.
-         const cloned = input.clone();
-         originalBody = await cloned.text();
+        // Note: If input is a Request object that has been used, this might fail.
+        // But usually in this context it's fresh.
+        const cloned = input.clone();
+        originalBody = await cloned.text();
       } catch (e) {
         // If clone fails (e.g. body used), we might be in trouble or it's empty.
       }
@@ -256,33 +256,33 @@ export async function prepareAntigravityRequest(
 
       if (isWrapped) {
         if (isClaudeModel) {
-            const context: TransformContext = {
-                model: effectiveModel,
-                family: getModelFamily(effectiveModel),
-                projectId: (parsedBody.project as string) || projectId,
-                streaming,
-                requestId: generateRequestId(),
-                sessionId: getSessionId(),
-            };
-            const innerRequest = parsedBody.request as Record<string, unknown>;
-            const result = transformClaudeRequest(context, innerRequest);
-            body = result.body;
-            transformDebugInfo = result.debugInfo;
+          const context: TransformContext = {
+            model: effectiveModel,
+            family: getModelFamily(effectiveModel),
+            projectId: (parsedBody.project as string) || projectId,
+            streaming,
+            requestId: generateRequestId(),
+            sessionId: getSessionId(),
+          };
+          const innerRequest = parsedBody.request as Record<string, unknown>;
+          const result = transformClaudeRequest(context, innerRequest);
+          body = result.body;
+          transformDebugInfo = result.debugInfo;
 
-            if (transformDebugInfo) {
-                log.debug("Using transformer (wrapped)", { transformer: transformDebugInfo.transformer, model: effectiveModel, family: context.family, toolCount: transformDebugInfo.toolCount });
-            }
+          if (transformDebugInfo) {
+            log.debug("Using transformer (wrapped)", { transformer: transformDebugInfo.transformer, model: effectiveModel, family: context.family, toolCount: transformDebugInfo.toolCount });
+          }
         } else {
-            const wrappedBody = {
+          const wrappedBody = {
             ...parsedBody,
             model: effectiveModel,
             userAgent: "antigravity",
             requestId: generateRequestId(),
-            } as Record<string, unknown>;
-            if (wrappedBody.request && typeof wrappedBody.request === "object") {
+          } as Record<string, unknown>;
+          if (wrappedBody.request && typeof wrappedBody.request === "object") {
             (wrappedBody.request as Record<string, unknown>).sessionId = getSessionId();
-            }
-            body = JSON.stringify(wrappedBody);
+          }
+          body = JSON.stringify(wrappedBody);
         }
       } else {
         const context: TransformContext = {
@@ -369,22 +369,22 @@ export async function transformAntigravityResponse(
     return response;
   }
 
-    const errorHandler = (body: GeminiApiBody): GeminiApiBody | null => {
-        const previewErrorFixed = rewriteGeminiPreviewAccessError(body, response.status, requestedModel);
-        const rateLimitErrorFixed = rewriteGeminiRateLimitError(body);
+  const errorHandler = (body: GeminiApiBody): GeminiApiBody | null => {
+    const previewErrorFixed = rewriteGeminiPreviewAccessError(body, response.status, requestedModel);
+    const rateLimitErrorFixed = rewriteGeminiRateLimitError(body);
 
-        const patched = previewErrorFixed ?? rateLimitErrorFixed;
+    const patched = previewErrorFixed ?? rateLimitErrorFixed;
 
-        if (previewErrorFixed?.error) {
-             client.tui.showToast({
-                body: { message: previewErrorFixed.error.message ?? "You need access to gemini 3", title: "Gemini 3 Access Required", variant: "error" }
-            }).catch(() => {});
-        }
+    if (previewErrorFixed?.error) {
+      client.tui.showToast({
+        body: { message: previewErrorFixed.error.message ?? "You need access to gemini 3", title: "Gemini 3 Access Required", variant: "error" }
+      }).catch(() => { });
+    }
 
-        return patched;
-    };
+    return patched;
+  };
 
-    if (streaming && response.ok && isEventStreamResponse && response.body) {
+  if (streaming && response.ok && isEventStreamResponse && response.body) {
     logAntigravityDebugResponse(debugContext, response, {
       note: "Streaming SSE (passthrough mode)",
     });
@@ -419,25 +419,25 @@ export async function transformAntigravityResponse(
     if (sessionId && parsed) {
       const responseBody = parsed.response as any;
       if (responseBody?.candidates) {
-         responseBody.candidates.forEach((candidate: any) => {
-             if (candidate.groundingMetadata) {
-               log.debug("Grounding metadata found", { groundingMetadata: candidate.groundingMetadata });
-             }
-             let fullText = "";
-             let signature = "";
-             if (candidate.content?.parts) {
-                 candidate.content.parts.forEach((part: any) => {
-                     if (part.thought) {
-                          if (part.text) fullText += part.text;
-                          if (part.thoughtSignature) signature = part.thoughtSignature;
-                     }
-                 });
-             }
-             if (fullText && signature) {
-                  cacheSignature(family, sessionId, fullText, signature);
-                  log.debug("Cached signature", { family, sessionId, textLen: fullText.length });
+        responseBody.candidates.forEach((candidate: any) => {
+          if (candidate.groundingMetadata) {
+            log.debug("Grounding metadata found", { groundingMetadata: candidate.groundingMetadata });
+          }
+          let fullText = "";
+          let signature = "";
+          if (candidate.content?.parts) {
+            candidate.content.parts.forEach((part: any) => {
+              if (part.thought) {
+                if (part.text) fullText += part.text;
+                if (part.thoughtSignature) signature = part.thoughtSignature;
               }
-         });
+            });
+          }
+          if (fullText && signature) {
+            cacheSignature(family, sessionId, fullText, signature);
+            log.debug("Cached signature", { family, sessionId, textLen: fullText.length });
+          }
+        });
       }
     }
 
@@ -487,7 +487,7 @@ export async function transformAntigravityResponse(
             variant: "error",
           },
         });
-      } catch {}
+      } catch { }
     }
 
     if (streaming && response.ok && isEventStreamResponse) {

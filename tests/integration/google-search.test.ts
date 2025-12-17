@@ -116,6 +116,57 @@ describe("Google Search Tool", () => {
     });
   });
 
+  describe("with Gemini 3 Flash", () => {
+    let sessionId: string;
+
+    beforeEach(async () => {
+      if (process.env.CI) return;
+      sessionId = await createSession(ctx);
+    });
+
+    afterEach(async () => {
+      if (process.env.CI) return;
+      if (sessionId) {
+        try {
+          await deleteSession(ctx, sessionId);
+        } catch {}
+      }
+    });
+
+    itSkipInCI("should enable google_search tool and return grounded results", async () => {
+      const response = await sendPrompt(
+        ctx,
+        sessionId,
+        "Search the web for today's top technology news.",
+        {
+          model: TEST_MODELS.gemini3Flash,
+          tools: { google_search: true },
+        }
+      );
+
+      expect(response).not.toBeNull();
+      expect(response!.info.role).toBe("assistant");
+
+      const assistantText = extractTextFromParts(response!.parts);
+      expect(assistantText.length).toBeGreaterThan(0);
+    });
+
+    itSkipInCI("should work without google_search tool", async () => {
+      const response = await sendPrompt(
+        ctx,
+        sessionId,
+        "What is the capital of France?",
+        {
+          model: TEST_MODELS.gemini3Flash,
+        }
+      );
+
+      expect(response).not.toBeNull();
+      const assistantText = extractTextFromParts(response!.parts);
+      expect(assistantText.toLowerCase()).toContain("paris");
+    });
+  });
+
   describe("with Claude Sonnet via Antigravity", () => {
     let sessionId: string;
 
