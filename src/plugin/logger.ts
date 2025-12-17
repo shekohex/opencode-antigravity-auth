@@ -1,4 +1,5 @@
 import type { PluginClient } from "./types";
+import { ENV_CONSOLE_LOG } from "../constants";
 
 type LogLevel = "debug" | "info" | "warn" | "error";
 
@@ -6,12 +7,21 @@ type ConsoleLogLevel = "debug" | "info" | "warn" | "error";
 
 const ANTIGRAVITY_CONSOLE_PREFIX = "[Antigravity]";
 
+function isConsoleLogEnabled(): boolean {
+  const val = process.env[ENV_CONSOLE_LOG];
+  return val === "1" || val?.toLowerCase() === "true";
+}
+
 export function printAntigravityConsole(
   level: ConsoleLogLevel,
   message: string,
   extra?: unknown,
   linesBefore: number = 1,
 ): void {
+  if (!isConsoleLogEnabled()) {
+    return;
+  }
+
   const pad = "\n".repeat(Math.max(0, Math.floor(linesBefore)));
   const prefixedMessage = `${ANTIGRAVITY_CONSOLE_PREFIX} ${message}`;
 
