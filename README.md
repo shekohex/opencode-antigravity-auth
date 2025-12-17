@@ -108,7 +108,7 @@ When you provide URLs in your query, the model will automatically extract and an
 ### Supported Models
 
 All models can use the `google_search` tool since it makes independent API calls:
-- **Gemini models** (2.5 Flash, 3 Pro, etc.)
+- **Gemini models** (2.5 Flash, 3 Pro, 3 Flash, etc.)
 - **Claude models** (via Antigravity proxy)
 
 ## Updating
@@ -143,6 +143,14 @@ Antigravity forwards Gemini model options, including `thinkingConfig`:
           "options": {
             "thinkingConfig": {
               "thinkingLevel": "high",
+              "includeThoughts": true
+            }
+          }
+        },
+        "gemini-3-flash": {
+          "options": {
+            "thinkingConfig": {
+              "thinkingLevel": "medium",
               "includeThoughts": true
             }
           }
@@ -259,6 +267,30 @@ You should copy that config to your opencode config file.
         "gemini-3-pro-low": {
           "id": "gemini-3-pro-preview",
           "name": "Gemini 3 Pro Preview (Low Thinking)",
+          "options": { "thinkingConfig": { "thinkingLevel": "low", "includeThoughts": true } }
+        },
+        "gemini-3-flash": {
+          "id": "gemini-3-flash",
+          "name": "Gemini 3 Flash",
+          "release_date": "2025-12-17",
+          "reasoning": true,
+          "limit": { "context": 1048576, "output": 65536 },
+          "cost": { "input": 0.5, "output": 3, "cache_read": 0.05 },
+          "modalities": { "input": ["text", "image", "video", "audio", "pdf"], "output": ["text"] }
+        },
+        "gemini-3-flash-high": {
+          "id": "gemini-3-flash",
+          "name": "Gemini 3 Flash (High Thinking)",
+          "options": { "thinkingConfig": { "thinkingLevel": "high", "includeThoughts": true } }
+        },
+        "gemini-3-flash-medium": {
+          "id": "gemini-3-flash",
+          "name": "Gemini 3 Flash (Medium Thinking)",
+          "options": { "thinkingConfig": { "thinkingLevel": "medium", "includeThoughts": true } }
+        },
+        "gemini-3-flash-low": {
+          "id": "gemini-3-flash",
+          "name": "Gemini 3 Flash (Low Thinking)",
           "options": { "thinkingConfig": { "thinkingLevel": "low", "includeThoughts": true } }
         },
         "gemini-2.5-flash": {
