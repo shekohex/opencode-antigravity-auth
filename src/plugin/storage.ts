@@ -5,11 +5,13 @@ import { createLogger } from "./logger";
 
 const log = createLogger("storage");
 
-export type ModelFamily = "claude" | "gemini";
+export type ModelFamily = "claude" | "gemini-flash" | "gemini-pro";
+export type AccountTier = "free" | "paid";
 
 export interface RateLimitState {
   claude?: number;
-  gemini?: number;
+  "gemini-flash"?: number;
+  "gemini-pro"?: number;
 }
 
 export interface AccountMetadataV1 {
@@ -32,6 +34,7 @@ export interface AccountStorageV1 {
 
 export interface AccountMetadata {
   email?: string;
+  tier?: AccountTier;
   refreshToken: string;
   projectId?: string;
   managedProjectId?: string;
@@ -71,7 +74,8 @@ function migrateV1ToV2(v1: AccountStorageV1): AccountStorage {
       const rateLimitResetTimes: RateLimitState = {};
       if (acc.isRateLimited && acc.rateLimitResetTime && acc.rateLimitResetTime > Date.now()) {
         rateLimitResetTimes.claude = acc.rateLimitResetTime;
-        rateLimitResetTimes.gemini = acc.rateLimitResetTime;
+        rateLimitResetTimes["gemini-flash"] = acc.rateLimitResetTime;
+        rateLimitResetTimes["gemini-pro"] = acc.rateLimitResetTime;
       }
       return {
         email: acc.email,

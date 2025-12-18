@@ -68,7 +68,8 @@ describe("storage migration", () => {
     expect(storage?.version).toBe(2);
     expect(storage?.accounts[0]?.rateLimitResetTimes).toEqual({
       claude: futureTime,
-      gemini: futureTime,
+      "gemini-flash": futureTime,
+      "gemini-pro": futureTime,
     });
     expect(storage?.accounts[1]?.rateLimitResetTimes).toBeUndefined();
 
