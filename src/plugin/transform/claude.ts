@@ -6,73 +6,6 @@ import type { RequestPayload, TransformContext, TransformResult } from "./types"
 
 const log = createLogger("transform.claude");
 
-const CLAUDE_TOOL_SCHEMA_SYSTEM_INSTRUCTION = `CRITICAL TOOL USAGE INSTRUCTIONS:
-You are operating in a custom environment where tool definitions differ from your training data.
-You MUST follow these rules strictly:
-
-1. DO NOT use your internal training data to guess tool parameters
-2. ONLY use the exact parameter structure defined in the tool schema
-3. Parameter names in schemas are EXACT - do not substitute with similar names from your training (e.g., use 'follow_up' not 'suggested_answers')
-4. Array parameters have specific item types - check the schema's 'items' field for the exact structure
-5. When you see "STRICT PARAMETERS" in a tool description, those type definitions override any assumptions
-6. Tool use in agentic workflows is REQUIRED - you must call tools with the exact parameters specified in the schema
-
-If you are unsure about a tool's parameters, YOU MUST read the schema definition carefully.`;
-
-function hasFunctionTools(payload: RequestPayload): boolean {
-  const tools = payload.tools as Array<Record<string, unknown>> | undefined;
-  if (!Array.isArray(tools)) return false;
-  return tools.some((tool) => Array.isArray(tool.functionDeclarations));
-}
-
-function extractSystemInstructionText(systemInstruction: unknown): string {
-  if (typeof systemInstruction === "string") {
-    return systemInstruction;
-  }
-  if (!systemInstruction || typeof systemInstruction !== "object") {
-    return "";
-  }
-
-  const parts = (systemInstruction as Record<string, unknown>).parts as Array<Record<string, unknown>> | undefined;
-  if (!Array.isArray(parts)) {
-    return "";
-  }
-
-  return parts
-    .map((part) => (typeof part.text === "string" ? part.text : ""))
-    .filter(Boolean)
-    .join("\n");
-}
-
-function injectSystemInstructionIfNeeded(payload: RequestPayload): void {
-  if (!hasFunctionTools(payload)) return;
-
-  const existingText = extractSystemInstructionText(payload.systemInstruction);
-  if (existingText.includes("CRITICAL TOOL USAGE INSTRUCTIONS:")) {
-    return;
-  }
-
-  const existing = payload.systemInstruction;
-  if (!existing || typeof existing === "string") {
-    const suffix = typeof existing === "string" && existing.trim().length > 0 ? `\n\n${existing}` : "";
-    payload.systemInstruction = { parts: [{ text: `${CLAUDE_TOOL_SCHEMA_SYSTEM_INSTRUCTION}${suffix}` }] };
-    return;
-  }
-
-  const asRecord = existing as Record<string, unknown>;
-  const parts = asRecord.parts;
-  if (Array.isArray(parts)) {
-    asRecord.parts = [{ text: CLAUDE_TOOL_SCHEMA_SYSTEM_INSTRUCTION }, ...parts];
-    payload.systemInstruction = asRecord;
-    return;
-  }
-
-  payload.systemInstruction = {
-    ...asRecord,
-    parts: [{ text: CLAUDE_TOOL_SCHEMA_SYSTEM_INSTRUCTION }],
-  };
-}
-
 function normalizeSchemaType(typeValue: unknown): string | undefined {
   if (typeof typeValue === "string") {
     return typeValue;
@@ -83,114 +16,6 @@ function normalizeSchemaType(typeValue: unknown): string | undefined {
     return typeof first === "string" ? first : undefined;
   }
   return undefined;
-}
-
-function summarizeSchema(schema: unknown, depth: number): string {
-  if (!schema || typeof schema !== "object") {
-    return "unknown";
-  }
-
-  const record = schema as Record<string, unknown>;
-  const normalizedType = normalizeSchemaType(record.type);
-  const enumValues = Array.isArray(record.enum) ? record.enum : undefined;
-
-  if (normalizedType === "array") {
-    const items = record.items;
-    const itemSummary = depth > 0 ? summarizeSchema(items, depth - 1) : "unknown";
-    return `array[${itemSummary}]`;
-  }
-
-  if (normalizedType === "object") {
-    const props = record.properties as Record<string, unknown> | undefined;
-    const required = Array.isArray(record.required) ? (record.required as unknown[]).filter((v): v is string => typeof v === "string") : [];
-
-    if (!props || depth <= 0) {
-      return "object";
-    }
-
-    const keys = Object.keys(props);
-    const requiredKeys = keys.filter((k) => required.includes(k));
-    const optionalKeys = keys.filter((k) => !required.includes(k));
-    const orderedKeys = [...requiredKeys.sort(), ...optionalKeys.sort()];
-
-    const maxPropsToShow = 8;
-    const shownKeys = orderedKeys.slice(0, maxPropsToShow);
-
-    const inner = shownKeys
-      .map((key) => {
-        const propSchema = props[key];
-        const propType = summarizeSchema(propSchema, depth - 1);
-        const requiredSuffix = required.includes(key) ? " REQUIRED" : "";
-        return `${key}: ${propType}${requiredSuffix}`;
-      })
-      .join(", ");
-
-    const extraCount = orderedKeys.length - shownKeys.length;
-    const extra = extraCount > 0 ? `, …+${extraCount}` : "";
-
-    return `{${inner}${extra}}`;
-  }
-
-  if (enumValues && enumValues.length > 0) {
-    const preview = enumValues.slice(0, 6).map(String).join("|");
-    const suffix = enumValues.length > 6 ? "|…" : "";
-    return `${normalizedType ?? "unknown"} enum(${preview}${suffix})`;
-  }
-
-  return normalizedType ?? "unknown";
-}
-
-function buildStrictParamsSummary(parametersSchema: Record<string, unknown>): string {
-  const schemaType = normalizeSchemaType(parametersSchema.type);
-  const properties = parametersSchema.properties as Record<string, unknown> | undefined;
-  const required = Array.isArray(parametersSchema.required)
-    ? (parametersSchema.required as unknown[]).filter((v): v is string => typeof v === "string")
-    : [];
-
-  if (schemaType !== "object" || !properties) {
-    return "(schema missing top-level object properties)";
-  }
-
-  const keys = Object.keys(properties);
-  const requiredKeys = keys.filter((k) => required.includes(k));
-  const optionalKeys = keys.filter((k) => !required.includes(k));
-  const orderedKeys = [...requiredKeys.sort(), ...optionalKeys.sort()];
-
-  const parts = orderedKeys.map((key) => {
-    const propSchema = properties[key];
-    const typeSummary = summarizeSchema(propSchema, 2);
-    const requiredSuffix = required.includes(key) ? " REQUIRED" : "";
-    return `${key}: ${typeSummary}${requiredSuffix}`;
-  });
-
-  const summary = parts.join(", ");
-  const maxLen = 900;
-  return summary.length > maxLen ? `${summary.slice(0, maxLen)}…` : summary;
-}
-
-function augmentToolDescriptionsWithStrictParams(payload: RequestPayload): void {
-  const tools = payload.tools as Array<Record<string, unknown>> | undefined;
-  if (!Array.isArray(tools)) return;
-
-  for (const tool of tools) {
-    const funcDecls = tool.functionDeclarations as Array<Record<string, unknown>> | undefined;
-    if (!Array.isArray(funcDecls)) continue;
-
-    for (const funcDecl of funcDecls) {
-      const schema = (funcDecl.parametersJsonSchema ?? funcDecl.parameters) as Record<string, unknown> | undefined;
-      if (!schema || typeof schema !== "object") continue;
-
-      const currentDescription = typeof funcDecl.description === "string" ? funcDecl.description : "";
-      if (currentDescription.includes("STRICT PARAMETERS:")) continue;
-
-      const summary = buildStrictParamsSummary(schema);
-      const nextDescription = currentDescription.trim().length > 0
-        ? `${currentDescription.trim()}\n\nSTRICT PARAMETERS: ${summary}`
-        : `STRICT PARAMETERS: ${summary}`;
-
-      funcDecl.description = nextDescription;
-    }
-  }
 }
 
 /**
@@ -217,6 +42,7 @@ export function transformClaudeRequest(
   let toolCount = 0;
 
   delete requestPayload.safetySettings;
+
 
   if (!requestPayload.toolConfig) {
     requestPayload.toolConfig = {};
@@ -393,9 +219,6 @@ export function transformClaudeRequest(
       }
     }
   }
-
-  augmentToolDescriptionsWithStrictParams(requestPayload);
-  injectSystemInstructionIfNeeded(requestPayload);
 
   const contents = requestPayload.contents as Array<Record<string, unknown>> | undefined;
 

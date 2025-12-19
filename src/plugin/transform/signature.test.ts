@@ -178,37 +178,6 @@ describe("thoughtSignature handling", () => {
       expect(funcDecl.description).toContain("filePath");
       expect(funcDecl.description).toContain("files");
     });
-
-    it("injects systemInstruction and strict params for Claude", () => {
-      const payload: RequestPayload = {
-        tools: [
-          {
-            functionDeclarations: [
-              {
-                name: "my_tool",
-                parametersJsonSchema: {
-                  type: "object",
-                  properties: {
-                    query: { type: "string" },
-                  },
-                  required: ["query"],
-                },
-              },
-            ],
-          },
-        ],
-        contents: [{ role: "user", parts: [{ text: "hi" }] }],
-      };
-
-      const context = createContext("claude-opus-4-5-thinking");
-      const result = transformClaudeRequest(context, payload);
-      const parsed = JSON.parse(result.body);
-
-      expect(parsed.request.systemInstruction.parts[0].text).toContain("CRITICAL TOOL USAGE INSTRUCTIONS:");
-      const funcDecl = parsed.request.tools[0].functionDeclarations[0];
-      expect(funcDecl.description).toContain("STRICT PARAMETERS:");
-      expect(funcDecl.description).toContain("query");
-    });
   });
 
   describe("recursivelyParseJsonStrings", () => {

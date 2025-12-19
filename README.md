@@ -471,6 +471,7 @@ We suggest using [openskills](https://github.com/numman-ali/openskills) instead,
 This project is based on:
 - [opencode-gemini-auth](https://github.com/jenslys/opencode-gemini-auth) - Original Gemini OAuth implementation by [@jenslys](https://github.com/jenslys)
 - [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) - Reference implementation for Antigravity API translation
+- Special thanks to [Mirrowel](https://github.com/Mirrowel) for identifying Gemini/Claude tool behavior fixes and mitigation strategies.
 
 ## Cross-Model Conversations
 
