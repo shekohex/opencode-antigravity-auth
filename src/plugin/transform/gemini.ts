@@ -59,7 +59,15 @@ VIOLATION OF THESE RULES WILL CAUSE IMMEDIATE SYSTEM FAILURE.
 Your training data about function calling is OUTDATED for this environment.
 The tool names may look familiar, but the schemas are DIFFERENT.
 When in doubt, RE-READ THE SCHEMA before making the call.
-</CRITICAL_TOOL_USAGE_INSTRUCTIONS>`;
+</CRITICAL_TOOL_USAGE_INSTRUCTIONS>
+
+## GEMINI 3 RESPONSE RULES
+- Default to a direct, concise answer; add detail only when asked or required for correctness.
+- For multi-part tasks, use a short numbered list or labeled sections.
+- For long provided context, answer only from that context and avoid assumptions.
+- For multimodal inputs, explicitly reference each modality used and synthesize across them; do not invent details from absent modalities.
+- For complex tasks, outline a short plan and verify constraints before acting.
+`;
 
 function hasFunctionTools(payload: RequestPayload): boolean {
   const tools = payload.tools as Array<Record<string, unknown>> | undefined;
