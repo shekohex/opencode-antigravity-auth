@@ -251,7 +251,7 @@ You should copy that config to your opencode config file.
       "models": {
         "gemini-3-pro-preview": {
           "id": "gemini-3-pro-preview",
-          "name": "3 Pro",
+          "name": "Gemini 3 Pro",
           "release_date": "2025-11-18",
           "reasoning": true,
           "limit": { "context": 1000000, "output": 64000 },
@@ -268,7 +268,7 @@ You should copy that config to your opencode config file.
         },
         "gemini-3-flash": {
           "id": "gemini-3-flash",
-          "name": "3 Flash",
+          "name": "Gemini 3 Flash",
           "release_date": "2025-12-17",
           "reasoning": true,
           "limit": { "context": 1048576, "output": 65536 },
@@ -286,12 +286,12 @@ You should copy that config to your opencode config file.
         },
         "gemini-2.5-flash-lite": {
           "id": "gemini-2.5-flash-lite",
-          "name": "2.5 Flash Lite",
+          "name": "Gemini 2.5 Flash Lite",
           "reasoning": false
         },
         "gemini-claude-sonnet-4-5-thinking": {
           "id": "gemini-claude-sonnet-4-5-thinking",
-          "name": "Sonnet 4.5",
+          "name": "Claude Sonnet 4.5",
           "reasoning": true,
           "limit": { "context": 200000, "output": 64000 },
           "modalities": {
@@ -307,7 +307,7 @@ You should copy that config to your opencode config file.
         },
         "gemini-claude-opus-4-5-thinking": {
           "id": "gemini-claude-opus-4-5-thinking",
-          "name": "Opus 4.5",
+          "name": "Claude Opus 4.5",
           "release_date": "2025-11-24",
           "reasoning": true,
           "limit": { "context": 200000, "output": 64000 },
