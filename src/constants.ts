@@ -1,3 +1,5 @@
+import { platform, arch } from "node:os";
+
 export const ANTIGRAVITY_CLIENT_ID = "1071006060591-tmhssin2h21lcre235vtolojh4g403ep.apps.googleusercontent.com";
 export const ANTIGRAVITY_CLIENT_SECRET = "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";
 export const ANTIGRAVITY_CALLBACK_PORT = 36742;
@@ -11,7 +13,27 @@ export const ANTIGRAVITY_SCOPES: readonly string[] = [
   "https://www.googleapis.com/auth/experimentsandconfigs",
 ];
 
-export const ANTIGRAVITY_USER_AGENT = "antigravity/1.11.5 windows/amd64";
+/**
+ * Map Node.js os values to Antigravity's expected platform/arch format.
+ * Falls back to "linux/amd64" if the platform or arch is unrecognized.
+ */
+function getAntigravityPlatform(): string {
+  const platformMap: Record<string, string> = {
+    darwin: "darwin",
+    linux: "linux",
+    win32: "windows",
+  };
+  const archMap: Record<string, string> = {
+    arm64: "arm64",
+    x64: "amd64",
+    ia32: "386",
+  };
+  const p = platformMap[platform()] ?? "linux";
+  const a = archMap[arch()] ?? "amd64";
+  return `${p}/${a}`;
+}
+
+export const ANTIGRAVITY_USER_AGENT = `antigravity/1.15.8 ${getAntigravityPlatform()}`;
 export const ANTIGRAVITY_API_CLIENT = "google-cloud-sdk vscode_cloudshelleditor/0.1";
 export const ANTIGRAVITY_CLIENT_METADATA = '{"ideType":"IDE_UNSPECIFIED","platform":"PLATFORM_UNSPECIFIED","pluginType":"GEMINI"}';
 
