@@ -11,7 +11,7 @@ export const ANTIGRAVITY_SCOPES: readonly string[] = [
   "https://www.googleapis.com/auth/experimentsandconfigs",
 ];
 
-export const ANTIGRAVITY_USER_AGENT = "antigravity/1.11.5 windows/amd64";
+export const ANTIGRAVITY_USER_AGENT = "antigravity/1.15.8 windows/amd64";
 export const ANTIGRAVITY_API_CLIENT = "google-cloud-sdk vscode_cloudshelleditor/0.1";
 export const ANTIGRAVITY_CLIENT_METADATA = '{"ideType":"IDE_UNSPECIFIED","platform":"PLATFORM_UNSPECIFIED","pluginType":"GEMINI"}';
 
