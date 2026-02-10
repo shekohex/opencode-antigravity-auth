@@ -458,6 +458,13 @@ export function createSseTransformStream(onError?: (body: GeminiApiBody) => Gemi
 
 
 function resolveModelName(rawModel: string): string {
+  // Antigravity exposes Claude via Gemini-style model IDs like:
+  // `gemini-claude-sonnet-4-6-thinking`, but the Code Assist backend expects
+  // `claude-sonnet-4-6-thinking`. Normalize all current/future Claude proxy IDs.
+  if (rawModel.startsWith("gemini-claude-")) {
+    return rawModel.replace(/^gemini-/, "");
+  }
+
   const aliased = MODEL_ALIASES[rawModel];
   if (aliased) {
     return aliased;
@@ -804,4 +811,3 @@ export async function transformAntigravityResponse(
     return response;
   }
 }
-
