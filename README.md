@@ -10,6 +10,13 @@ Authenticate the Opencode CLI with your Antigravity (Cloud Code) account so you 
 - **Cross-Model Conversations** - Seamlessly switch between Gemini and Claude with thinking block preservation
 - **Automatic Token Refresh** - Handles auth transparently with no manual intervention
 
+> [!CAUTION]
+> There are reports of Google blocking accounts using this plugin, and the current
+> [Antigravity ToS](https://antigravity.google/terms) (as of 2026-18-02) states
+> that their service can't be used with third-party products.
+>
+> Use this plugin at your own discretion.
+
 ## Setup
 
 1. Add the plugin to your [Opencode config](https://opencode.ai/docs/config/):
