@@ -196,6 +196,9 @@ Antigravity provides access to Claude models via `gemini-claude-*` model names. 
 - `gemini-claude-sonnet-4-5` - Claude Sonnet 4.5
 - `gemini-claude-sonnet-4-5-thinking` - Claude Sonnet 4.5 with thinking
 - `gemini-claude-opus-4-5-thinking` - Claude Opus 4.5 with thinking
+- `gemini-claude-sonnet-4-6` - Claude Sonnet 4.6
+- `gemini-claude-sonnet-4-6-thinking` - Claude Sonnet 4.6 with thinking
+- `gemini-claude-opus-4-6-thinking` - Claude Opus 4.6 with thinking
 
 ### Interleaved Thinking Support
 
@@ -468,5 +471,4 @@ Turn 5: Switch to Gemini  → Claude's thinking removed, Gemini Turn 3 restored 
 - **No cross-contamination**: Impossible for signatures to leak between families
 - **Conversation text preserved**: Only thinking blocks are removed; actual response text flows through normally
 - **Same-provider continuity**: Each family maintains its own thinking history across model switches
-
 

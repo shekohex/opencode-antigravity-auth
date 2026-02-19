@@ -18,6 +18,23 @@ describe("Interleaved Thinking Headers", () => {
     expect(headers.get("anthropic-beta")).toBe("interleaved-thinking-2025-05-14");
   });
 
+  test("supports Claude 4.6 thinking models (aliases and adds header)", async () => {
+    const url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-claude-sonnet-4-6-thinking:streamGenerateContent";
+
+    const result = await prepareAntigravityRequest(
+      url,
+      { method: "POST", body: JSON.stringify({ contents: [] }) },
+      "dummy-token",
+      "dummy-project"
+    );
+
+    const headers = result.init.headers as Headers;
+    expect(headers.get("anthropic-beta")).toBe("interleaved-thinking-2025-05-14");
+
+    const body = JSON.parse(result.init.body as string);
+    expect(body.model).toBe("claude-sonnet-4-6-thinking");
+  });
+
   test("does NOT add header for non-thinking claude models", async () => {
     const url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-claude-sonnet-4-5:streamGenerateContent";
     
